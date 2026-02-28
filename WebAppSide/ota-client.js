@@ -11,6 +11,9 @@ class BleOtaClient {
         this.otaStatusChar = null;
         this.onProgressCallback = null;
         this.onStatusCallback = null;
+        this.lastStatus = '';
+        this.otaCompletionInProgress = false;
+        this.disconnectListener = null;
     }
 
     /**
@@ -36,6 +39,7 @@ class BleOtaClient {
             await this.otaStatusChar.startNotifications();
             this.otaStatusChar.addEventListener('characteristicvaluechanged', (event) => {
                 const status = new TextDecoder().decode(event.target.value);
+                this.lastStatus = status;
                 console.log('[BLE-OTA] Status update:', status);
                 if (this.onStatusCallback) {
                     this.onStatusCallback(status);
@@ -121,10 +125,11 @@ class BleOtaClient {
             console.log('[BLE-OTA] All data sent, sending END command...');
 
             // Step 3: Send END command
+            this.otaCompletionInProgress = true;
             await this.otaControlChar.writeValue(new TextEncoder().encode('END'));
 
-            // Wait for SUCCESS status
-            await this.waitForStatus('SUCCESS', 10000);
+            // Wait for SUCCESS status or expected reboot disconnect
+            await this.waitForCompletion(10000);
             console.log('[BLE-OTA] Firmware upload successful!');
 
             return {
@@ -154,6 +159,7 @@ class BleOtaClient {
     async waitForStatus(expectedStatus, timeoutMs) {
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
+                this.onStatusCallback = null;
                 reject(new Error(`Timeout waiting for status: ${expectedStatus}`));
             }, timeoutMs);
 
@@ -174,6 +180,53 @@ class BleOtaClient {
     }
 
     /**
+     * Wait for OTA completion after END command
+     * Accepts either SUCCESS status or expected reboot disconnect.
+     */
+    async waitForCompletion(timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const cleanup = () => {
+                this.onStatusCallback = null;
+                if (this.disconnectListener && this.device) {
+                    this.device.removeEventListener('gattserverdisconnected', this.disconnectListener);
+                }
+                this.disconnectListener = null;
+                this.otaCompletionInProgress = false;
+            };
+
+            const timeout = setTimeout(() => {
+                cleanup();
+                reject(new Error('Timeout waiting for OTA completion (SUCCESS or reboot disconnect)'));
+            }, timeoutMs);
+
+            this.disconnectListener = () => {
+                if (this.otaCompletionInProgress) {
+                    console.log('[BLE-OTA] Device disconnected during completion phase, treating as reboot after success');
+                    clearTimeout(timeout);
+                    cleanup();
+                    resolve();
+                }
+            };
+
+            if (this.device) {
+                this.device.addEventListener('gattserverdisconnected', this.disconnectListener, { once: true });
+            }
+
+            this.onStatusCallback = (status) => {
+                if (status === 'SUCCESS') {
+                    clearTimeout(timeout);
+                    cleanup();
+                    resolve();
+                } else if (status.startsWith('ERROR:')) {
+                    clearTimeout(timeout);
+                    cleanup();
+                    reject(new Error(status));
+                }
+            };
+        });
+    }
+
+    /**
      * Set progress callback
      */
     setProgressCallback(callback) {
@@ -184,12 +237,18 @@ class BleOtaClient {
      * Disconnect
      */
     disconnect() {
+        if (this.disconnectListener && this.device) {
+            this.device.removeEventListener('gattserverdisconnected', this.disconnectListener);
+        }
         this.device = null;
         this.otaControlChar = null;
         this.otaDataChar = null;
         this.otaStatusChar = null;
         this.onProgressCallback = null;
         this.onStatusCallback = null;
+        this.lastStatus = '';
+        this.otaCompletionInProgress = false;
+        this.disconnectListener = null;
     }
 }
 

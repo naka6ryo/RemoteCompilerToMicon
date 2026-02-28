@@ -95,6 +95,8 @@ size_t ota_expected_size = 0;
 size_t ota_received_size = 0;
 size_t ota_last_reported_size = 0;
 bool ota_in_progress = false;
+bool ota_finalize_requested = false;
+bool ota_abort_requested = false;
 
 bool ble_device_connected = false;
 
@@ -110,8 +112,8 @@ void log_println(const char *msg)
         Serial.flush();
     }
 
-    // Send via BLE if connected (real-time only)
-    if (ble_device_connected && pDebugLogTx)
+    // Send via BLE if connected (real-time only) - but NOT during OTA
+    if (ble_device_connected && pDebugLogTx && !ota_in_progress)
     {
         size_t len = strlen(msg);
         if (len > 0)
@@ -377,54 +379,13 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks
                 return;
             }
 
-            log_println("[OTA] Finalizing update...");
-
-            if (Update.end(true))
-            {
-                Serial.printf("[OTA] Update Success: %u bytes\n", ota_received_size);
-                log_println("[I] OTA update successful!");
-                ota_in_progress = false;
-                ota_mode_active = false;
-
-                if (pOtaStatus)
-                {
-                    pOtaStatus->setValue("SUCCESS");
-                    pOtaStatus->notify();
-                }
-
-                delay(1000);
-                log_println("[I] Rebooting...");
-                delay(500);
-                ESP.restart();
-            }
-            else
-            {
-                Update.printError(Serial);
-                log_println("[E] Update.end() failed");
-                ota_in_progress = false;
-
-                if (pOtaStatus)
-                {
-                    pOtaStatus->setValue("ERROR:END_FAILED");
-                    pOtaStatus->notify();
-                }
-            }
+            log_println("[OTA] Finalize requested - will process in main loop");
+            ota_finalize_requested = true;
         }
         else if (command == "ABORT")
         {
-            log_println("[W] OTA aborted by user");
-            if (ota_in_progress)
-            {
-                Update.abort();
-                ota_in_progress = false;
-            }
-            ota_mode_active = false;
-
-            if (pOtaStatus)
-            {
-                pOtaStatus->setValue("ABORTED");
-                pOtaStatus->notify();
-            }
+            log_println("[W] OTA abort requested by user");
+            ota_abort_requested = true;
         }
     }
 };
@@ -467,15 +428,16 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks
 
         ota_received_size += written;
 
-        // Progress notification every 100KB or at completion
+        // Progress notification every 100KB or at completion (but skip BLE notify during OTA data writes)
         if (ota_received_size - ota_last_reported_size >= 102400 || ota_received_size == ota_expected_size)
         {
             ota_last_reported_size = ota_received_size;
-            Serial.printf("[OTA] Progress: %u / %u bytes (%.1f%%)\n",
+            Serial.printf("[OTA] Progress: %u / %u bytes (%.1f%%)\\n",
                           ota_received_size, ota_expected_size,
                           (ota_received_size * 100.0) / ota_expected_size);
 
-            if (pOtaStatus)
+            // Only notify progress occasionally to reduce BLE stack load
+            if (pOtaStatus && (ota_received_size % 204800 == 0 || ota_received_size == ota_expected_size))
             {
                 char progress[32];
                 snprintf(progress, sizeof(progress), "PROGRESS:%u/%u",
@@ -782,11 +744,73 @@ void setup()
 
 void loop()
 {
+    // Handle OTA finalization request (moved from BLE callback to avoid stack issues)
+    if (ota_finalize_requested)
+    {
+        ota_finalize_requested = false;
+
+        log_println("[OTA] Finalizing update...");
+        Serial.printf("[OTA] Received: %u bytes / Expected: %u bytes\n", ota_received_size, ota_expected_size);
+
+        if (Update.end(true)) // true = do checksum validation
+        {
+            Serial.printf("[OTA] Update Success: %u bytes\n", ota_received_size);
+            log_println("[I] OTA update successful!");
+            ota_in_progress = false;
+            ota_mode_active = false;
+
+            if (pOtaStatus)
+            {
+                pOtaStatus->setValue("SUCCESS");
+                pOtaStatus->notify();
+            }
+
+            delay(1000);
+            log_println("[I] Rebooting...");
+            delay(500);
+            ESP.restart();
+        }
+        else
+        {
+            Serial.println("\n=== Update.end() FAILED ===");
+            Serial.printf("[OTA] ota_received_size = %u\n", ota_received_size);
+            Serial.printf("[OTA] ota_expected_size = %u\n", ota_expected_size);
+            Update.printError(Serial);
+            log_println("[E] Update.end() failed");
+            ota_in_progress = false;
+
+            if (pOtaStatus)
+            {
+                pOtaStatus->setValue("ERROR:END_FAILED");
+                pOtaStatus->notify();
+            }
+        }
+    }
+
+    // Handle OTA abort request
+    if (ota_abort_requested)
+    {
+        ota_abort_requested = false;
+        log_println("[W] OTA aborted by user");
+        if (ota_in_progress)
+        {
+            Update.abort();
+            ota_in_progress = false;
+        }
+        ota_mode_active = false;
+
+        if (pOtaStatus)
+        {
+            pOtaStatus->setValue("ABORTED");
+            pOtaStatus->notify();
+        }
+    }
+
     // If OTA mode is active, stop normal app operation
     if (ota_mode_active)
     {
         // Only handle BLE and OTA processing
-        delay(100);
+        delay(10); // Reduced delay for faster response
         return;
     }
 
