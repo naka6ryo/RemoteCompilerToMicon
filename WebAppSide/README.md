@@ -1,216 +1,123 @@
 # ESP32-S3 Remote Control WebApp
 
-ESP32-S3 Super Mini 用の BLE Wi-Fi プロビジョニング + BLE OTA + BLE デバッグモニタ WebApp です。
+ESP32-S3 Super Mini向けの、BLE接続・Wi-Fiプロビジョニング・BLE OTA・デバッグモニタ用Webアプリです。
 
-iPad上の Bluefy ブラウザで実行することを想定しています。
+**注意: ファームウェア更新はBLE経由のみで実行します。HTTP OTAは実装していません。**
 
-**注意: ファームウェア更新（OTA）は完全にBLE経由で実行されます。Wi-FiはHTTP OTAには使用しません。**
+## 現行機能（実装準拠）
 
-## 機能
+1. **BLE Device Connection**
 
-1. **BLE デバイス接続** - Web Bluetooth API を使用した BLE 接続
-2. **Wi-Fi 設定** - BLE 経由で WiFi SSID/パスワードを ESP32 へ送信（プロビジョニング確認用）
-3. **ファームウェア更新 (OTA)** - 完全にBLE経由でファームウェア更新（180バイトチャンク、最大2MB）
-4. **BLE デバッグモニタ** - ESP32 のシリアルログを BLE で受信・表示
+- `Connect Device` で `namePrefix: ESP32` のデバイスを検索
+- Debug Service / OTA Service /（あれば）Provisioning Service を利用
+
+2. **Wi-Fi Provisioning**
+
+- BLEでWi-Fi資格情報を送信
+- 送信形式は `SSID\nPassword`
+
+3. **Firmware Upload (BLE OTA)**
+
+- `.bin` を選択して `Upload Firmware`
+- 内部的に `OTA_MODE` → `START:<size>` → チャンク送信（180 bytes）→ `END`
+- 完了判定は `SUCCESS` または再起動による切断
+
+4. **BLE Debug Monitor**
+
+- DebugLogTx通知を表示
+- 任意のデバッグコマンドを送信
 
 ## 対応ブラウザ
 
-- **Bluefy** (iPad) - Web Bluetooth API 対応
-- Chrome/Edge (Web Bluetooth API サポート環境)
+- Bluefy（iPad）
+- Web Bluetooth API対応のChrome / Edge
 
-## ファイル構成
+Safari単体はWeb Bluetooth API非対応です。
 
+## ディレクトリ構成
+
+```text
+WebAppSide/
+├── index.html
+├── styles.css
+├── constants.js
+├── ble-client.js
+├── ota-client.js
+├── firmware-client.js
+├── ui.js
+├── app.js
+├── package.json
+├── netlify.toml
+└── README.md
 ```
-WenAppSide/
-├── index.html          # メイン HTML
-├── styles.css          # スタイルシート
-├── constants.js        # 定数・設定値
-├── ble-client.js       # BLE 通信ロジック
-├── ota-client.js       # BLE OTA クライアント（HTTP OTAは未実装）
-├── firmware-client.js  # BLE経由ファームウェアクライアント
-├── ui.js               # UI 更新管理
-├── app.js              # メインアプリロジック
-├── package.json        # npm パッケージ設定
-├── netlify.toml        # Netlify デプロイ設定
-└── README.md           # このファイル
-```
 
-## ローカル実行
+## ローカル起動
 
-### 方法1: Live Server (VS Code)
-
-1. VS Code で Live Server 拡張をインストール
-2. `index.html` を右クリック → "Open with Live Server"
-
-### 方法2: Python HTTP Server
+### Node.js（推奨）
 
 ```bash
-# Python 3
+cd c:\Users\naka6\Projects\RemoteCompilerToMicon\WebAppSide
+npm run dev
+```
+
+`package.json` のスクリプト:
+
+- `npm run start` → `npx http-server -p 8080 -o`
+- `npm run dev` → `npx http-server -p 8080`
+
+### Python簡易サーバー
+
+```bash
 python -m http.server 8000
-
-# または Python 2
-python -m SimpleHTTPServer 8000
 ```
 
-ブラウザで `http://localhost:8000` にアクセス
+## 使い方
 
-### 方法3: Node.js HTTP Server
+1. **BLE接続**
 
-```bash
-npx http-server -p 8080
-```
+- `Connect Device` を押してESP32を選択
 
-## Netlify へのデプロイ
+2. **Wi-Fi設定（任意）**
 
-### 方法1: Netlify CLI を使用
+- SSID / Password を入力して `Send Configuration`
 
-```bash
-# Netlify CLI をインストール
-npm install -g netlify-cli
+3. **OTA更新**
 
-# WenAppSide ディレクトリへ移動
-cd WenAppSide
+- `.bin` ファイルを選択して `Upload Firmware`
+- UIに進捗（10%刻み）と結果を表示
 
-# デプロイ
-netlify deploy --prod --dir=.
-```
+4. **デバッグ**
 
-### 方法2: GitHub 連携
+- `Subscribe to Logs` でログ受信
+- 必要ならコマンド送信（例: `STATUS`, `OTA_MODE`, `RESET_NVS`）
 
-1. このリポジトリを GitHub にプッシュ
-2. Netlify にログイン (https://app.netlify.com)
-3. "New site from Git" を選択
-4. リポジトリを選択
-5. ビルド設定：
-   - Build command: (空白)
-   - Publish directory: `WenAppSide/`
-6. "Deploy site" をクリック
+## 主要定数（`constants.js`）
 
-### 方法3: ドラッグ&ドロップ
+- OTAチャンクサイズ: `180`
+- OTA最大ファームサイズ（WebApp側設定値）: `2,097,152 bytes`
+- BLEデバイスフィルタ: `namePrefix: ESP32`
 
-1. Netlify にログイン
-2. WenAppSide フォルダをドラッグ&ドロップしてアップロード
-
-## 使用方法
-
-### 1. デバイス接続
-
-1. "Connect Device" をクリック
-2. BLE デバイス選択ダイアログで ESP32-S3 を検索・選択
-3. 接続が確立されると "Connected" と表示される
-
-### 2. Wi-Fi 設定
-
-1. SSID とパスワードを入力
-2. "Send Configuration" をクリック
-3. ESP32 が Wi-Fi に接続すると IP アドレスが表示される
-
-### 3. ファームウェア更新 (OTA) - BLE経由
-
-1. BLE 接続が確立していることを確認
-2. `.bin` ファイルを選択（最大2MB）
-3. "Upload Firmware" をクリック
-4. BLE経由でOTA_MODEコマンド送信
-5. ファームウェアデータをBLE経由で送信（180バイトチャンク）
-6. 進捗が表示され、完了後デバイスが再起動される
-
-### 4. デバッグモニタ
-
-1. "Subscribe to Logs" をクリック
-2. ESP32 からのログが表示される
-3. 必要に応じてデバッグコマンドを送信可能
-   - `LVL:0` - ログレベルをエラーのみに変更
-   - `LVL:1` - ログレベルをワーニング以上に変更
-   - `LVL:2` - ログレベルをイントが以上に変更
-   - `CLR` - ログバッファをクリア
-   - `PING` - デバイスへの ping
-
-## 技術スタック
-
-- HTML5
-- CSS3 (Flexbox, Grid)
-- Vanilla JavaScript (フレームワーク不使用)
-- Web Bluetooth API
-- Fetch API
+※ デバイス側（ESP32）の `START:<size>` 判定上限は `2,000,000 bytes` です。
 
 ## トラブルシューティング
 
-### BLE が接続できない
+### 接続できない
 
-- Safari では Web Bluetooth API がサポートされていません → Bluefy を使用してください
-- デバイスが BLE 接続可能な状態か確認してください
-- ブラウザのコンソール (開発者ツール) でエラーを確認できます
+- Web Bluetooth対応ブラウザか確認
+- デバイスが広告中か確認
+- 切断後は再度 `Connect Device` を実行
 
-### OTA が実行できない
+### OTAが失敗する
 
-- BLE 接続が確立していることを確認してください
-- ファイルサイズが2MB以下であることを確認してください
-- デバイスとiPadの距離が近いことを確認（BLE範囲内）
-- 他のBLEデバイスとの干渉がないか確認
+- `.bin` 以外のファイルを選んでいないか確認
+- 実質サイズが `2,000,000 bytes` を超えていないか確認
+- BLE距離を近づけ、干渉源を減らす
 
-### BLE OTA 転送が途中で止まる
+### Provisioning Serviceが見つからない
 
-- デバイスとの距離を縮めてください（BLEの通信範囲は約10m）
-- 他のBluetooth機器を切断してください
-- デバイスメモリ不足の可能性 - デバイスを再起動してください
+- デバイスが既にAPPモードの場合、Provisioning Serviceが広告されない実装です
 
-## カスタマイズ
+## 関連
 
-### BLE UUID の変更
-
-`constants.js` の `BLE_UUIDS` オブジェクトを編集：
-
-```javascript
-const BLE_UUIDS = {
-  DEBUG_SERVICE_UUID: "your-service-uuid",
-  // ...
-};
-```
-
-### BLE OTA 設定の変更
-
-`constants.js` の `BLE_UUIDS` でOTA Service UUIDsを確認・編集：
-
-```javascript
-const BLE_UUIDS = {
-  // ...
-  OTA_SERVICE_UUID: "9f5f0001-8d9e-6f4e-bd0c-3c4d5e6f7180",
-  OTA_CONTROL_UUID: "9f5f0002-8d9e-6f4e-bd0c-3c4d5e6f7180",
-  OTA_DATA_UUID: "9f5f0003-8d9e-6f4e-bd0c-3c4d5e6f7180",
-  OTA_STATUS_UUID: "9f5f0004-8d9e-6f4e-bd0c-3c4d5e6f7180",
-};
-```
-
-### UI カラーの変更
-
-`styles.css` の CSS 変数を編集：
-
-```css
-:root {
-  --color-primary: #3498db;
-  --color-secondary: #2ecc71;
-  /* ... */
-}
-```
-
-## セキュリティに関する注意
-
-- **WiFi パスワードは暗号化されません**（BLE経由で平文送信）
-- **BLE通信範囲内で通信可能**（約10m範囲内）
-- 本番環境では、BLEペアリングの使用を推奨します
-- WebAppはHTTPSで配信することを推奨します（Netlify等）
-
-## ライセンス
-
-MIT License
-
-## 仕様書参照
-
-詳細な仕様については以下を参照してください：
-
-- [CreatePlan.md](../CreatePlan.md) - 実装詳細設計書
-- [SpecifcationDoc.md](../SpecifcationDoc.md) - 仕様書
-
-## 関連プロジェクト
-
-- ESP32-S3 マイコン側ファームウェア: [MiconSide/MiconSide.ino](../MiconSide/MiconSide.ino)
+- マイコン側: `../MiconSide/`
+- ルート仕様: `../README.md`

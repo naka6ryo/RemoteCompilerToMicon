@@ -38,6 +38,8 @@ const OTA_CONFIG = {
     CHUNK_SIZE: 180,              // BLE chunk size (bytes) - optimized for iOS/Bluefy
     MAX_FIRMWARE_SIZE: 2097152,   // 2 MB
     TIMEOUT_MS: 120000,           // 2 minutes
+    CHUNK_RETRY_COUNT: 3,         // retry count per chunk on transient BLE errors
+    INTER_CHUNK_DELAY_MS: 8,      // pacing delay to reduce packet loss
 };
 
 // Debug commands

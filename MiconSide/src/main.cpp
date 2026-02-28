@@ -345,6 +345,8 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks
             ota_received_size = 0;
             ota_last_reported_size = 0;
             ota_in_progress = true;
+            ota_finalize_requested = false;
+            ota_abort_requested = false;
 
             if (!Update.begin(size, U_FLASH))
             {
@@ -379,6 +381,19 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks
                 return;
             }
 
+            if (ota_received_size != ota_expected_size)
+            {
+                char err[64];
+                snprintf(err, sizeof(err), "[E] OTA incomplete: %u / %u", ota_received_size, ota_expected_size);
+                log_println(err);
+                if (pOtaStatus)
+                {
+                    pOtaStatus->setValue("ERROR:INCOMPLETE");
+                    pOtaStatus->notify();
+                }
+                return;
+            }
+
             log_println("[OTA] Finalize requested - will process in main loop");
             ota_finalize_requested = true;
         }
@@ -406,6 +421,21 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks
         if (len == 0)
         {
             log_println("[E] Empty OTA data packet");
+            return;
+        }
+
+        if (ota_received_size + len > ota_expected_size)
+        {
+            log_println("[E] OTA data overflow (received more than expected)");
+            Update.abort();
+            ota_in_progress = false;
+            ota_mode_active = false;
+
+            if (pOtaStatus)
+            {
+                pOtaStatus->setValue("ERROR:OVERFLOW");
+                pOtaStatus->notify();
+            }
             return;
         }
 
@@ -509,8 +539,7 @@ void setup_ble_ota_service(void)
     // OTA Data (Write) - for firmware binary data
     pOtaData = pOtaService->createCharacteristic(
         OTA_DATA_UUID,
-        BLECharacteristic::PROPERTY_WRITE |
-            BLECharacteristic::PROPERTY_WRITE_NR);
+        BLECharacteristic::PROPERTY_WRITE);
     pOtaData->setCallbacks(new OtaDataCallbacks());
 
     // OTA Status (Read/Notify) - for progress and status updates
