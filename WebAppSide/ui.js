@@ -202,6 +202,26 @@ class UIManager {
         document.getElementById('wifi-ssid').value = '';
         document.getElementById('wifi-password').value = '';
     }
+
+    /**
+     * Show factory reset option
+     */
+    showFactoryResetOption() {
+        const container = document.getElementById('wifi-reset-container');
+        if (container) {
+            container.style.display = 'block';
+        }
+    }
+
+    /**
+     * Hide factory reset option
+     */
+    hideFactoryResetOption() {
+        const container = document.getElementById('wifi-reset-container');
+        if (container) {
+            container.style.display = 'none';
+        }
+    }
 }
 
 // Global instance

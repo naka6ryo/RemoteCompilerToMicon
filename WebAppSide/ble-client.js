@@ -254,7 +254,9 @@ class BLEClient {
             }
 
             if (!this.characteristics.wifiConfig) {
-                throw new Error('WiFi Config characteristic not available. Device may already be provisioned.');
+                const error = new Error('WiFi Config characteristic not available. Device may already be provisioned. Please reset the device to enable WiFi provisioning.');
+                error.code = 'PROVISION_SERVICE_NOT_AVAILABLE';
+                throw error;
             }
 
             // Format: "SSID\nPassword"

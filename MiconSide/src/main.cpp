@@ -581,21 +581,15 @@ void init_ble(void)
     log_println("[I] Setting up OTA service...");
     setup_ble_ota_service();
 
-    // Setup provisioning service if in PROVISIONING mode
-    if (g_state.system_state == STATE_PROVISIONING)
-    {
-        log_println("[I] Setting up provisioning service...");
-        setup_ble_provisioning_service();
-    }
+    // Setup provisioning service (always available for WiFi re-provisioning during operation)
+    log_println("[I] Setting up provisioning service...");
+    setup_ble_provisioning_service();
 
     log_println("[I] Starting advertising...");
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(DEBUG_SERVICE_UUID);
     pAdvertising->addServiceUUID(OTA_SERVICE_UUID);
-    if (g_state.system_state == STATE_PROVISIONING)
-    {
-        pAdvertising->addServiceUUID(PROV_SERVICE_UUID);
-    }
+    pAdvertising->addServiceUUID(PROV_SERVICE_UUID); // Always advertise provisioning service
     pAdvertising->setScanResponse(true);
     pAdvertising->setMinPreferred(0x06);
     pAdvertising->setMaxPreferred(0x12);

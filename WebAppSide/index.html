@@ -54,6 +54,16 @@
                             <button type="reset" class="btn btn-secondary">Clear</button>
                         </div>
                     </form>
+
+                    <!-- Factory Reset Option (shown only when provisioning service is unavailable) -->
+                    <div id="wifi-reset-container" class="wifi-reset-container" style="display: none;">
+                        <div class="info-section">
+                            <p class="info-text">⚠ デバイスは既にプロビジョニング済みの可能性があります</p>
+                            <p class="info-text">ℹ WiFi設定を変更するには、デバイスをリセットしてください</p>
+                            <button type="button" id="wifi-reset-btn" class="btn btn-warning">デバイスをリセット</button>
+                        </div>
+                    </div>
+
                     <div id="wifi-result" class="info-message"></div>
                     <div id="wifi-error" class="error-message"></div>
                     <div class="status-display">

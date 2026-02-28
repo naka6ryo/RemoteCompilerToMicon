@@ -34,6 +34,7 @@ class ESP32RemoteApp {
 
         // Wi-Fi section
         document.getElementById('wifi-form').addEventListener('submit', (e) => this.handleWiFiSubmit(e));
+        document.getElementById('wifi-reset-btn').addEventListener('click', () => this.handleFactoryReset());
 
         // Firmware section
         document.getElementById('firmware-file').addEventListener('change', (e) => this.handleFileSelect(e));
@@ -171,8 +172,61 @@ class ESP32RemoteApp {
 
         } catch (error) {
             console.error('[App] Wi-Fi config error:', error);
-            uiManager.showError('wifi-error', error.message);
-            this.logToUI(`[Wi-Fi] Error: ${error.message}`);
+            
+            // Check specific error type
+            if (error.code === 'PROVISION_SERVICE_NOT_AVAILABLE') {
+                // Device may be using old firmware or is not responding
+                uiManager.showFactoryResetOption();
+                this.logToUI('[Wi-Fi] ⚠ Provisioning service not available on device');
+                this.logToUI('[Wi-Fi] ℹ Please try one of these options:');
+                this.logToUI('[Wi-Fi] 1. Click the "Reset Device" button to enable WiFi provisioning');
+                this.logToUI('[Wi-Fi] 2. Or check if the device firmware is up to date');
+            } else {
+                // Other error (timeout, invalid credentials, etc.)
+                uiManager.showError('wifi-error', error.message);
+                this.logToUI(`[Wi-Fi] Error: ${error.message}`);
+                this.logToUI('[Wi-Fi] ℹ Please verify SSID and password are correct');
+            }
+        }
+    }
+
+    /**
+     * Handle device factory reset
+     */
+    async handleFactoryReset() {
+        try {
+            if (!bleClient.isConnected) {
+                throw new Error('BLE not connected');
+            }
+
+            // Confirm with user
+            const confirmed = confirm(
+                'この操作はデバイスをリセットし、WiFiプロビジョニング状態に戻ります。\n\n' +
+                'リセットしてもよろしいですか？\n\n' +
+                '(OK: リセット実行 / キャンセル: 中止)'
+            );
+
+            if (!confirmed) {
+                this.logToUI('[Factory Reset] Cancelled by user');
+                return;
+            }
+
+            this.logToUI('[Factory Reset] Sending reset command to device...');
+            uiManager.hideFactoryResetOption();
+            
+            // Send factory reset command
+            await bleClient.sendCommand('FACTORY_RESET');
+            
+            this.logToUI('[Factory Reset] ✓ Reset command sent!');
+            this.logToUI('[Factory Reset] Device will reboot in 2 seconds...');
+            this.logToUI('[Factory Reset] ℹ Your BLE connection will be lost during the reboot');
+            this.logToUI('[Factory Reset] ⏳ Wait 10 seconds, then reconnect to the device');
+            this.logToUI('[Factory Reset] After reconnection, you can configure WiFi');
+
+        } catch (error) {
+            console.error('[App] Factory reset error:', error);
+            uiManager.showError('wifi-error', `Factory reset failed: ${error.message}`);
+            this.logToUI(`[Factory Reset] Error: ${error.message}`);
         }
     }
 

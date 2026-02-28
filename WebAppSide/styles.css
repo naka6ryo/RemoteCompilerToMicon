@@ -294,6 +294,15 @@ form {
     background-color: #c0392b;
 }
 
+.btn-warning {
+    background-color: var(--color-warning);
+    color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background-color: #e67e22;
+}
+
 /* ========================================================================== */
 /* Message Styles */
 /* ========================================================================== */
@@ -351,6 +360,34 @@ form {
 
 .warning-message.show {
     display: block;
+}
+
+/* ========================================================================== */
+/* WiFi Reset Container */
+/* ========================================================================== */
+
+.wifi-reset-container {
+    margin-top: 16px;
+    padding: 16px;
+    background-color: #fff3cd;
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius);
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.info-text {
+    font-size: var(--font-size-small);
+    color: var(--color-text);
+    margin: 0;
+}
+
+#wifi-reset-btn {
+    align-self: flex-start;
 }
 
 /* ========================================================================== */
