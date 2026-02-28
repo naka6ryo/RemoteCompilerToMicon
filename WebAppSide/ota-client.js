@@ -104,33 +104,32 @@ class BleOtaClient {
 
                     for (let retry = 0; retry < CHUNK_RETRY_COUNT; retry++) {
                         try {
-                            // Try writeWithoutResponse first for speed
-                            if (this.otaDataChar.writeValueWithoutResponse) {
-                                await this.otaDataChar.writeValueWithoutResponse(chunk);
-                                chunkSent = true;
-                                usedWithoutResponse = true;
-                                break;
-                            }
-                        } catch (nrError) {
-                            lastChunkError = nrError;
-                        }
+                            // Use write with response for reliability
+                            const writeWithResponse = this.otaDataChar.writeValue(chunk);
+                            const timeoutPromise = new Promise((_, reject) => {
+                                setTimeout(() => reject(new Error('write timeout')), WRITE_TIMEOUT_MS);
+                            });
 
-                        // Fallback to write with response if without-response failed
-                        if (!chunkSent) {
-                            try {
-                                const writeWithResponse = this.otaDataChar.writeValue(chunk);
-                                const timeoutPromise = new Promise((_, reject) => {
-                                    setTimeout(() => reject(new Error('write timeout')), WRITE_TIMEOUT_MS);
-                                });
-
-                                await Promise.race([writeWithResponse, timeoutPromise]);
-                                chunkSent = true;
-                                usedWithoutResponse = false;
-                                break;
-                            } catch (retryError) {
-                                lastChunkError = retryError;
-                                await new Promise(resolve => setTimeout(resolve, 20));
+                            await Promise.race([writeWithResponse, timeoutPromise]);
+                            chunkSent = true;
+                            usedWithoutResponse = false;
+                            break;
+                        } catch (retryError) {
+                            lastChunkError = retryError;
+                            
+                            // Only use writeWithoutResponse as fallback with proper pacing
+                            if (retry >= 2 && this.otaDataChar.writeValueWithoutResponse) {
+                                try {
+                                    await this.otaDataChar.writeValueWithoutResponse(chunk);
+                                    chunkSent = true;
+                                    usedWithoutResponse = true;
+                                    break;
+                                } catch (nrError) {
+                                    lastChunkError = nrError;
+                                }
                             }
+
+                            await new Promise(resolve => setTimeout(resolve, 30));
                         }
                     }
 
