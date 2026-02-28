@@ -458,16 +458,16 @@ class OtaDataCallbacks : public BLECharacteristicCallbacks
 
         ota_received_size += written;
 
-        // Progress notification every 50KB or at completion (more frequent for debugging)
-        if (ota_received_size - ota_last_reported_size >= 51200 || ota_received_size == ota_expected_size)
+        // Progress notification every 100KB or at completion (reduce overhead)
+        if (ota_received_size - ota_last_reported_size >= 102400 || ota_received_size == ota_expected_size)
         {
             ota_last_reported_size = ota_received_size;
-            Serial.printf("[OTA] Progress: %u / %u bytes (%.1f%%) - chunk: %u bytes\n",
+            Serial.printf("[OTA] Progress: %u / %u bytes (%.1f%%)\n",
                           ota_received_size, ota_expected_size,
-                          (ota_received_size * 100.0) / ota_expected_size, len);
+                          (ota_received_size * 100.0) / ota_expected_size);
 
             // Only notify progress occasionally to reduce BLE stack load
-            if (pOtaStatus && (ota_received_size % 102400 == 0 || ota_received_size == ota_expected_size))
+            if (pOtaStatus && (ota_received_size % 204800 == 0 || ota_received_size == ota_expected_size))
             {
                 char progress[32];
                 snprintf(progress, sizeof(progress), "PROGRESS:%u/%u",
@@ -542,6 +542,7 @@ void setup_ble_ota_service(void)
         BLECharacteristic::PROPERTY_WRITE |
             BLECharacteristic::PROPERTY_WRITE_NR);
     pOtaData->setCallbacks(new OtaDataCallbacks());
+    pOtaData->setValue((uint8_t *)"", 0); // Initialize empty
 
     // OTA Status (Read/Notify) - for progress and status updates
     pOtaStatus = pOtaService->createCharacteristic(

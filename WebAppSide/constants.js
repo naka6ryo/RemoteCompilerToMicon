@@ -35,13 +35,14 @@ const BLE_DEVICE_FILTER = {
 
 // BLE OTA Configuration
 const OTA_CONFIG = {
-    CHUNK_SIZE: 200,              // BLE chunk size (bytes) - balanced for speed and reliability
+    CHUNK_SIZE: 400,              // BLE chunk size (bytes) - large size for max speed
     MAX_FIRMWARE_SIZE: 2097152,   // 2 MB
     TIMEOUT_MS: 120000,           // 2 minutes
     CHUNK_RETRY_COUNT: 5,         // retry count per chunk on transient BLE errors
-    WRITE_TIMEOUT_MS: 1200,       // timeout for one write operation
-    INTER_CHUNK_DELAY_MS: 2,      // pacing delay for write-with-response (primary path)
-    INTER_CHUNK_DELAY_NR_MS: 25,  // pacing delay for write-without-response (needs more time to avoid packet loss)
+    WRITE_TIMEOUT_MS: 1000,       // timeout for one write operation
+    INTER_CHUNK_DELAY_MS: 0,      // no delay for writeWithoutResponse (max speed)
+    RELIABILITY_CHECK_INTERVAL: 20, // send write-with-response every N chunks for reliability (reduced from 50 to minimize packet loss)
+    END_COMMAND_DELAY_MS: 300,    // delay before sending END command to ensure all data written (increased from 120)
 };
 
 // Debug commands
