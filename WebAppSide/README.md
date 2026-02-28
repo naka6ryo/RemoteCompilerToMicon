@@ -1,14 +1,16 @@
 # ESP32-S3 Remote Control WebApp
 
-ESP32-S3 Super Mini 用の BLE Wi-Fi プロビジョニング + 条件付き Web OTA + BLE デバッグモニタ WebApp です。
+ESP32-S3 Super Mini 用の BLE Wi-Fi プロビジョニング + BLE OTA + BLE デバッグモニタ WebApp です。
 
 iPad上の Bluefy ブラウザで実行することを想定しています。
+
+**注意: ファームウェア更新（OTA）は完全にBLE経由で実行されます。Wi-FiはHTTP OTAには使用しません。**
 
 ## 機能
 
 1. **BLE デバイス接続** - Web Bluetooth API を使用した BLE 接続
-2. **Wi-Fi 設定** - BLE 経由で WiFi SSID/パスワードを ESP32 へ送信
-3. **ファームウェア更新 (OTA)** - BLE プロビジョニング後、HTTP 経由でファームウェア更新
+2. **Wi-Fi 設定** - BLE 経由で WiFi SSID/パスワードを ESP32 へ送信（プロビジョニング確認用）
+3. **ファームウェア更新 (OTA)** - 完全にBLE経由でファームウェア更新（180バイトチャンク、最大2MB）
 4. **BLE デバッグモニタ** - ESP32 のシリアルログを BLE で受信・表示
 
 ## 対応ブラウザ
@@ -24,7 +26,8 @@ WenAppSide/
 ├── styles.css          # スタイルシート
 ├── constants.js        # 定数・設定値
 ├── ble-client.js       # BLE 通信ロジック
-├── ota-client.js       # OTA HTTP クライアント
+├── ota-client.js       # BLE OTA クライアント（HTTP OTAは未実装）
+├── firmware-client.js  # BLE経由ファームウェアクライアント
 ├── ui.js               # UI 更新管理
 ├── app.js              # メインアプリロジック
 ├── package.json        # npm パッケージ設定
@@ -102,12 +105,14 @@ netlify deploy --prod --dir=.
 2. "Send Configuration" をクリック
 3. ESP32 が Wi-Fi に接続すると IP アドレスが表示される
 
-### 3. ファームウェア更新 (OTA)
+### 3. ファームウェア更新 (OTA) - BLE経由
 
-1. Wi-Fi 接続直後に "OTA Status" が "Allowed" になる
-2. `.bin` ファイルを選択
+1. BLE 接続が確立していることを確認
+2. `.bin` ファイルを選択（最大2MB）
 3. "Upload Firmware" をクリック
-4. 進捗が表示され、完了後デバイスが再起動される
+4. BLE経由でOTA_MODEコマンド送信
+5. ファームウェアデータをBLE経由で送信（180バイトチャンク）
+6. 進捗が表示され、完了後デバイスが再起動される
 
 ### 4. デバッグモニタ
 
@@ -138,15 +143,16 @@ netlify deploy --prod --dir=.
 
 ### OTA が実行できない
 
-- BLE プロビジョニング直後のみ OTA が可能です
-- OTA セッション TTL (デフォルト 300秒 / 5分) が切れていないか確認してください
-- デバイスと同じ Wi-Fi ネットワークに接続していることを確認してください
+- BLE 接続が確立していることを確認してください
+- ファイルサイズが2MB以下であることを確認してください
+- デバイスとiPadの距離が近いことを確認（BLE範囲内）
+- 他のBLEデバイスとの干渉がないか確認
 
-### HTTP 通信がタイムアウトする
+### BLE OTA 転送が途中で止まる
 
-- デバイスの IP アドレスが正しいか確認
-- デバイスとブラウザが同じネットワーク上にあるか確認
-- ファイアウォール設定を確認
+- デバイスとの距離を縮めてください（BLEの通信範囲は約10m）
+- 他のBluetooth機器を切断してください
+- デバイスメモリ不足の可能性 - デバイスを再起動してください
 
 ## カスタマイズ
 
@@ -156,20 +162,22 @@ netlify deploy --prod --dir=.
 
 ```javascript
 const BLE_UUIDS = {
-    DEBUG_SERVICE_UUID: 'your-service-uuid',
-    // ...
+  DEBUG_SERVICE_UUID: "your-service-uuid",
+  // ...
 };
 ```
 
-### OTA 設定の変更
+### BLE OTA 設定の変更
 
-`constants.js` の `OTA_CONFIG` オブジェクトを編集：
+`constants.js` の `BLE_UUIDS` でOTA Service UUIDsを確認・編集：
 
 ```javascript
-const OTA_CONFIG = {
-    TIMEOUT_MS: 120000,     // HTTP タイムアウト (ミリ秒)
-    SESSION_TTL_SEC: 300,   // OTA セッション有効期限 (秒)
-    MAX_USES: 1,            // 1セッション内の使用回数
+const BLE_UUIDS = {
+  // ...
+  OTA_SERVICE_UUID: "9f5f0001-8d9e-6f4e-bd0c-3c4d5e6f7180",
+  OTA_CONTROL_UUID: "9f5f0002-8d9e-6f4e-bd0c-3c4d5e6f7180",
+  OTA_DATA_UUID: "9f5f0003-8d9e-6f4e-bd0c-3c4d5e6f7180",
+  OTA_STATUS_UUID: "9f5f0004-8d9e-6f4e-bd0c-3c4d5e6f7180",
 };
 ```
 
@@ -179,18 +187,18 @@ const OTA_CONFIG = {
 
 ```css
 :root {
-    --color-primary: #3498db;
-    --color-secondary: #2ecc71;
-    /* ... */
+  --color-primary: #3498db;
+  --color-secondary: #2ecc71;
+  /* ... */
 }
 ```
 
 ## セキュリティに関する注意
 
-- **本番環境では Basic 認証の使用を避けてください** (平文送信)
-- **WiFi パスワードは暗号化されません**（初期実装）
-- HTTPS を使用することを推奨します
-- ローカルネットワーク内でのみ使用を推奨します
+- **WiFi パスワードは暗号化されません**（BLE経由で平文送信）
+- **BLE通信範囲内で通信可能**（約10m範囲内）
+- 本番環境では、BLEペアリングの使用を推奨します
+- WebAppはHTTPSで配信することを推奨します（Netlify等）
 
 ## ライセンス
 

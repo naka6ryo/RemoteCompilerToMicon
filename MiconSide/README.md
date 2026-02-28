@@ -1,12 +1,14 @@
 # ESP32-S3 Super Mini - Micon Side (PlatformIO)
 
-BLE Wi-Fi プロビジョニング + 条件付き Web OTA + BLE デバッグモニタ機能を備えた ESP32-S3 Super Mini用のファームウェアです。
+BLE Wi-Fi プロビジョニング + BLE OTA + BLE デバッグモニタ機能を備えた ESP32-S3 Super Mini用のファームウェアです。
+
+**注意: OTAは完全にBLE経由で実装されています。HTTP OTAは実装されていません。**
 
 ## 機能
 
 - ✅ BLE Wi-Fi プロビジョニング
-- ✅ Wi-Fi 遅延起動（通常アプリ起動後に必要時のみ接続）
-- ✅ 条件付き Web OTA（BLEプロビジョニング直後のみ有効）
+- ✅ Wi-Fi 接続（プロビジョニング時の確認のみ）
+- ✅ BLE OTA（完全にBLE経由でファームウェア更新）
 - ✅ BLE デバッグシリアルモニタ
 - ✅ シリアル通信でHello World出力（30秒ごと）
 
@@ -97,7 +99,7 @@ upload_port = COM3  ; 自分のポートに変更
 [App Core] This is the embedded application running on ESP32-S3
 [App Core] Current system state: 2
 [App Core] Wi-Fi state: 0
-[App Core] OTA session state: 0
+[App Core] OTA mode: IDLE
 [App Core] ======================================
 ```
 
@@ -137,14 +139,28 @@ MiconSide/
 └── README.md           # このファイル
 ```
 
-## BLE デバッグサービス UUID
+## BLE サービス UUID
 
 仕様書より：
+
+### Debug Service
 
 - Debug Service: `7f3f0001-6b7c-4f2e-9b8a-1a2b3c4d5e6f`
 - DebugLogTx (Notify): `7f3f0002-6b7c-4f2e-9b8a-1a2b3c4d5e6f`
 - DebugCmdRx (Write): `7f3f0003-6b7c-4f2e-9b8a-1a2b3c4d5e6f`
 - DebugStat (Read/Notify): `7f3f0005-6b7c-4f2e-9b8a-1a2b3c4d5e6f`
+
+### Provisioning Service
+
+- Provisioning Service: `8f4f0001-7c8d-5f3e-ac9b-2b3c4d5e6f70`
+- WiFi Config (Write): `8f4f0002-7c8d-5f3e-ac9b-2b3c4d5e6f70`
+
+### OTA Service
+
+- OTA Service: `9f5f0001-8d9e-6f4e-bd0c-3c4d5e6f7180`
+- OTA Control (Write/Read): `9f5f0002-8d9e-6f4e-bd0c-3c4d5e6f7180`
+- OTA Data (Write): `9f5f0003-8d9e-6f4e-bd0c-3c4d5e6f7180`
+- OTA Status (Read/Notify): `9f5f0004-8d9e-6f4e-bd0c-3c4d5e6f7180`
 
 ## オプション設定
 

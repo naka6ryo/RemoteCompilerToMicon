@@ -33,20 +33,11 @@ const BLE_DEVICE_FILTER = {
     ]
 };
 
-// HTTP API Endpoints (will be filled with target IP)
-const HTTP_API = {
-    STATUS: '/api/status',
-    OTA_GET: '/update',
-    OTA_POST: '/update',
-};
-
-// OTA Configuration
+// BLE OTA Configuration
 const OTA_CONFIG = {
+    CHUNK_SIZE: 180,              // BLE chunk size (bytes) - optimized for iOS/Bluefy
+    MAX_FIRMWARE_SIZE: 2097152,   // 2 MB
     TIMEOUT_MS: 120000,           // 2 minutes
-    SESSION_TTL_SEC: 300,          // 5 minutes
-    MAX_USES: 1,
-    DEFAULT_USER: 'admin',
-    DEFAULT_PASS: 'admin',
 };
 
 // Debug commands

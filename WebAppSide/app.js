@@ -163,7 +163,8 @@ class ESP32RemoteApp {
             this.logToUI('[Wi-Fi] ✓ BLE transmission complete!');
             uiManager.showSuccess('wifi-result', 'Wi-Fi configuration sent! Device will reboot and connect.');
             this.logToUI('[Wi-Fi] Device will reboot in 2 seconds.');
-            this.logToUI('[Wi-Fi] After reboot, device will connect to WiFi and you can use HTTP OTA.');
+            this.logToUI('[Wi-Fi] After reboot, device will connect to WiFi.');
+            this.logToUI('[Info] To update firmware, use BLE OTA (Firmware Update panel).');
             
             // Clear form
             uiManager.clearWiFiForm();
