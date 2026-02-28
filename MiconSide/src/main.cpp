@@ -539,7 +539,8 @@ void setup_ble_ota_service(void)
     // OTA Data (Write) - for firmware binary data
     pOtaData = pOtaService->createCharacteristic(
         OTA_DATA_UUID,
-        BLECharacteristic::PROPERTY_WRITE);
+        BLECharacteristic::PROPERTY_WRITE |
+            BLECharacteristic::PROPERTY_WRITE_NR);
     pOtaData->setCallbacks(new OtaDataCallbacks());
 
     // OTA Status (Read/Notify) - for progress and status updates
@@ -558,6 +559,10 @@ void init_ble(void)
 {
     log_println("[I] Starting BLE device init...");
     BLEDevice::init("ESP32-S3-MICON");
+
+    // Request larger MTU for better OTA throughput
+    BLEDevice::setMTU(517);
+
     log_println("[I] BLE device initialized");
 
     delay(100);

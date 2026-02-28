@@ -35,11 +35,13 @@ const BLE_DEVICE_FILTER = {
 
 // BLE OTA Configuration
 const OTA_CONFIG = {
-    CHUNK_SIZE: 180,              // BLE chunk size (bytes) - optimized for iOS/Bluefy
+    CHUNK_SIZE: 240,              // BLE chunk size (bytes) - optimized for speed
     MAX_FIRMWARE_SIZE: 2097152,   // 2 MB
     TIMEOUT_MS: 120000,           // 2 minutes
-    CHUNK_RETRY_COUNT: 3,         // retry count per chunk on transient BLE errors
-    INTER_CHUNK_DELAY_MS: 8,      // pacing delay to reduce packet loss
+    CHUNK_RETRY_COUNT: 5,         // retry count per chunk on transient BLE errors
+    WRITE_TIMEOUT_MS: 800,        // timeout for one write operation
+    INTER_CHUNK_DELAY_MS: 1,      // pacing delay for write-with-response fallback
+    INTER_CHUNK_DELAY_NR_MS: 5,   // pacing delay for write-without-response (primary path)
 };
 
 // Debug commands

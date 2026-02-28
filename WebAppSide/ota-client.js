@@ -79,10 +79,16 @@ class BleOtaClient {
             // Step 2: Send firmware data in chunks
             const CHUNK_SIZE = OTA_CONFIG.CHUNK_SIZE;
             const CHUNK_RETRY_COUNT = OTA_CONFIG.CHUNK_RETRY_COUNT;
+            const WRITE_TIMEOUT_MS = OTA_CONFIG.WRITE_TIMEOUT_MS;
             const INTER_CHUNK_DELAY_MS = OTA_CONFIG.INTER_CHUNK_DELAY_MS;
+            const INTER_CHUNK_DELAY_NR_MS = OTA_CONFIG.INTER_CHUNK_DELAY_NR_MS;
             const totalChunks = Math.ceil(firmwareSize / CHUNK_SIZE);
             let sentBytes = 0;
             let lastProgressNotified = -1;
+
+            if (this.onProgressCallback) {
+                this.onProgressCallback(0, firmwareSize, 0);
+            }
 
             console.log(`[BLE-OTA] Sending firmware in ${totalChunks} chunks (${CHUNK_SIZE} bytes each)...`);
 
@@ -94,16 +100,37 @@ class BleOtaClient {
                 try {
                     let chunkSent = false;
                     let lastChunkError = null;
+                    let usedWithoutResponse = false;
 
                     for (let retry = 0; retry < CHUNK_RETRY_COUNT; retry++) {
                         try {
-                            // Reliable transfer: always use write with response.
-                            await this.otaDataChar.writeValue(chunk);
-                            chunkSent = true;
-                            break;
-                        } catch (retryError) {
-                            lastChunkError = retryError;
-                            await new Promise(resolve => setTimeout(resolve, 25));
+                            // Try writeWithoutResponse first for speed
+                            if (this.otaDataChar.writeValueWithoutResponse) {
+                                await this.otaDataChar.writeValueWithoutResponse(chunk);
+                                chunkSent = true;
+                                usedWithoutResponse = true;
+                                break;
+                            }
+                        } catch (nrError) {
+                            lastChunkError = nrError;
+                        }
+
+                        // Fallback to write with response if without-response failed
+                        if (!chunkSent) {
+                            try {
+                                const writeWithResponse = this.otaDataChar.writeValue(chunk);
+                                const timeoutPromise = new Promise((_, reject) => {
+                                    setTimeout(() => reject(new Error('write timeout')), WRITE_TIMEOUT_MS);
+                                });
+
+                                await Promise.race([writeWithResponse, timeoutPromise]);
+                                chunkSent = true;
+                                usedWithoutResponse = false;
+                                break;
+                            } catch (retryError) {
+                                lastChunkError = retryError;
+                                await new Promise(resolve => setTimeout(resolve, 20));
+                            }
                         }
                     }
 
@@ -113,21 +140,17 @@ class BleOtaClient {
 
                     sentBytes += chunk.byteLength;
 
-                    // Console logは粗めに（5%ごと）
                     const progress = Math.round((sentBytes / firmwareSize) * 100);
                     if (progress >= lastProgressNotified + 5 || i === totalChunks - 1) {
                         lastProgressNotified = progress;
                         console.log(`[BLE-OTA] Progress: ${sentBytes}/${firmwareSize} bytes (${progress}%) - Chunk ${i+1}/${totalChunks}`);
                     }
 
-                    if (this.onProgressCallback) {
-                        // UI通知は10%ごと + 完了時だけ
-                        if (progress % 10 === 0 || i === totalChunks - 1) {
-                            this.onProgressCallback(sentBytes, firmwareSize, progress);
-                        }
+                    if (this.onProgressCallback && (i % 5 === 0 || i === totalChunks - 1)) {
+                        this.onProgressCallback(sentBytes, firmwareSize, progress);
                     }
 
-                    await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+                    await new Promise(resolve => setTimeout(resolve, usedWithoutResponse ? INTER_CHUNK_DELAY_NR_MS : INTER_CHUNK_DELAY_MS));
 
                 } catch (error) {
                     console.error(`[BLE-OTA] Error sending chunk ${i+1}/${totalChunks}:`, error);
