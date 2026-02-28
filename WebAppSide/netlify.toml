@@ -1,0 +1,38 @@
+# Netlify Configuration for ESP32 Remote Control WebApp
+# This configuration enables proper SPA routing and caching
+
+# Build settings
+[build]
+  command = "echo 'Static site'"
+  publish = "."
+
+# Redirect all non-file requests to index.html for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Cache headers for static assets
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache control for HTML
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# Cache control for CSS/JS
+[[headers]]
+  for = "/*.{js,css}"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+# Allow HTTP (Bluefy compatibility)
+[context.production]
+  environment = { NETLIFY_USE_HTTPS = "false" }

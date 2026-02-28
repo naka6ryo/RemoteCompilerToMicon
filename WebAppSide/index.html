@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-S3 Remote Control - Bluefy WebApp</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ESP32-S3 Remote Control</h1>
+            <p class="subtitle">BLE Provisioning + OTA + Debug Monitor</p>
+        </header>
+
+        <main>
+            <!-- Section 1: BLE Connection -->
+            <section id="ble-section" class="card">
+                <h2>1. BLE Device Connection</h2>
+                <div class="section-content">
+                    <div class="status-display">
+                        <div class="status-item">
+                            <span class="status-label">Connection Status:</span>
+                            <span id="ble-status" class="status-value disconnected">⚪ Disconnected</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Device Name:</span>
+                            <span id="device-name" class="status-value">---</span>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="ble-connect-btn" class="btn btn-primary">Connect Device</button>
+                        <button id="ble-disconnect-btn" class="btn btn-secondary" disabled>Disconnect</button>
+                    </div>
+                    <div id="ble-error" class="error-message"></div>
+                </div>
+            </section>
+
+            <!-- Section 2: Wi-Fi Configuration -->
+            <section id="wifi-section" class="card">
+                <h2>2. Wi-Fi Provisioning</h2>
+                <div class="section-content">
+                    <form id="wifi-form">
+                        <div class="form-group">
+                            <label for="wifi-ssid">SSID</label>
+                            <input type="text" id="wifi-ssid" placeholder="Network SSID" disabled required>
+                        </div>
+                        <div class="form-group">
+                            <label for="wifi-password">Password</label>
+                            <input type="password" id="wifi-password" placeholder="Network Password" disabled required>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" id="wifi-send-btn" class="btn btn-primary" disabled>Send Configuration</button>
+                            <button type="reset" class="btn btn-secondary">Clear</button>
+                        </div>
+                    </form>
+                    <div id="wifi-result" class="info-message"></div>
+                    <div id="wifi-error" class="error-message"></div>
+                    <div class="status-display">
+                        <div class="status-item">
+                            <span class="status-label">Device IP:</span>
+                            <span id="device-ip" class="status-value">---</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Firmware Upload (OTA) -->
+            <section id="script-section" class="card">
+                <h2>3. Firmware Upload (OTA)</h2>
+                <div class="section-content">
+                    <div class="status-display">
+                        <div class="status-item">
+                            <span class="status-label">OTA Session:</span>
+                            <span id="ota-status" class="status-value">Not Active</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Device IP:</span>
+                            <span id="ota-target-ip" class="status-value">---</span>
+                        </div>
+                    </div>
+
+                    <form id="script-form">
+                        <div class="form-group">
+                            <label for="firmware-file">Firmware Binary (.bin)</label>
+                            <input type="file" id="firmware-file" accept=".bin,application/octet-stream" disabled>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" id="script-send-btn" class="btn btn-primary" disabled>Upload Firmware</button>
+                        </div>
+                    </form>
+
+                    <div id="script-result" class="info-message"></div>
+                    <div id="script-error" class="error-message"></div>
+                </div>
+            </section>
+
+            <!-- Section 4: BLE Debug Monitor -->
+            <section id="debug-section" class="card">
+                <h2>4. BLE Debug Monitor</h2>
+                <div class="section-content">
+                    <div class="button-group">
+                        <button id="debug-clear-btn" class="btn btn-secondary">Clear Log</button>
+                        <button id="debug-subscribe-btn" class="btn btn-primary" disabled>Subscribe to Logs</button>
+                    </div>
+
+                    <div id="debug-log-container" class="log-container">
+                        <div id="debug-log" class="log-window">
+                            <p class="log-line log-info">[System] Ready for BLE connection</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="debug-command">Debug Command (optional)</label>
+                        <div class="input-group">
+                            <input type="text" id="debug-command" placeholder="e.g., LVL:2 | CLR | PING" disabled>
+                            <button id="debug-send-cmd-btn" class="btn btn-secondary" disabled>Send</button>
+                        </div>
+                    </div>
+
+                    <div id="debug-error" class="error-message"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p class="footer-text">ESP32-S3 Super Mini | BLE + Web OTA Control | v1.0.0</p>
+        </footer>
+    </div>
+
+    <script src="constants.js"></script>
+    <script src="ble-client.js"></script>
+    <script src="ota-client.js"></script>
+    <script src="firmware-client.js"></script>
+    <script src="ui.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

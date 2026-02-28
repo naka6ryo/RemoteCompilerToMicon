@@ -1,0 +1,198 @@
+// ============================================================================
+// BLE OTA Client Module
+// Handles firmware upload to ESP32 via BLE
+// ============================================================================
+
+class BleOtaClient {
+    constructor() {
+        this.device = null;
+        this.otaControlChar = null;
+        this.otaDataChar = null;
+        this.otaStatusChar = null;
+        this.onProgressCallback = null;
+        this.onStatusCallback = null;
+    }
+
+    /**
+     * Connect to BLE device and get OTA characteristics
+     */
+    async connect(bleDevice) {
+        try {
+            this.device = bleDevice;
+            
+            if (!this.device || !this.device.gatt.connected) {
+                throw new Error('BLE device not connected');
+            }
+
+            console.log('[BLE-OTA] Getting OTA service...');
+            const otaService = await this.device.gatt.getPrimaryService(BLE_UUIDS.OTA_SERVICE_UUID);
+            
+            console.log('[BLE-OTA] Getting OTA characteristics...');
+            this.otaControlChar = await otaService.getCharacteristic(BLE_UUIDS.OTA_CONTROL_UUID);
+            this.otaDataChar = await otaService.getCharacteristic(BLE_UUIDS.OTA_DATA_UUID);
+            this.otaStatusChar = await otaService.getCharacteristic(BLE_UUIDS.OTA_STATUS_UUID);
+
+            // Subscribe to status notifications
+            await this.otaStatusChar.startNotifications();
+            this.otaStatusChar.addEventListener('characteristicvaluechanged', (event) => {
+                const status = new TextDecoder().decode(event.target.value);
+                console.log('[BLE-OTA] Status update:', status);
+                if (this.onStatusCallback) {
+                    this.onStatusCallback(status);
+                }
+            });
+
+            console.log('[BLE-OTA] OTA service ready');
+            return true;
+
+        } catch (error) {
+            console.error('[BLE-OTA] Connection error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload firmware via BLE OTA
+     */
+    async uploadFirmware(firmwareData) {
+        try {
+            if (!this.otaControlChar || !this.otaDataChar || !this.otaStatusChar) {
+                throw new Error('OTA service not connected');
+            }
+
+            const firmwareSize = firmwareData.byteLength;
+            console.log(`[BLE-OTA] Starting firmware upload: ${firmwareSize} bytes`);
+
+            // Step 1: Send START command
+            const startCommand = `START:${firmwareSize}`;
+            console.log('[BLE-OTA] Sending START command:', startCommand);
+            await this.otaControlChar.writeValue(new TextEncoder().encode(startCommand));
+
+            // Wait for READY status
+            await this.waitForStatus('READY', 5000);
+            console.log('[BLE-OTA] Device ready to receive firmware');
+
+            // Step 2: Send firmware data in chunks
+            const CHUNK_SIZE = 180; // iOS/Bluefyで安定しやすいサイズ
+            const totalChunks = Math.ceil(firmwareSize / CHUNK_SIZE);
+            let sentBytes = 0;
+            let lastProgressNotified = -1;
+
+            console.log(`[BLE-OTA] Sending firmware in ${totalChunks} chunks (${CHUNK_SIZE} bytes each)...`);
+
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, firmwareSize);
+                const chunk = firmwareData.slice(start, end);
+
+                try {
+                    if (this.otaDataChar.writeValueWithoutResponse) {
+                        await this.otaDataChar.writeValueWithoutResponse(chunk);
+                    } else {
+                        await this.otaDataChar.writeValue(chunk);
+                    }
+                    sentBytes += chunk.byteLength;
+
+                    // Console logは粗めに（5%ごと）
+                    const progress = Math.round((sentBytes / firmwareSize) * 100);
+                    if (progress >= lastProgressNotified + 5 || i === totalChunks - 1) {
+                        lastProgressNotified = progress;
+                        console.log(`[BLE-OTA] Progress: ${sentBytes}/${firmwareSize} bytes (${progress}%) - Chunk ${i+1}/${totalChunks}`);
+                    }
+
+                    if (this.onProgressCallback) {
+                        // UI通知は10%ごと + 完了時だけ
+                        if (progress % 10 === 0 || i === totalChunks - 1) {
+                            this.onProgressCallback(sentBytes, firmwareSize, progress);
+                        }
+                    }
+
+                    // 連続送信しすぎないように間欠的に待機
+                    if (i % 4 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 40));
+                    }
+
+                } catch (error) {
+                    console.error(`[BLE-OTA] Error sending chunk ${i+1}/${totalChunks}:`, error);
+                    throw new Error(`Failed to send chunk ${i+1}: ${error.message}`);
+                }
+            }
+
+            console.log('[BLE-OTA] All data sent, sending END command...');
+
+            // Step 3: Send END command
+            await this.otaControlChar.writeValue(new TextEncoder().encode('END'));
+
+            // Wait for SUCCESS status
+            await this.waitForStatus('SUCCESS', 10000);
+            console.log('[BLE-OTA] Firmware upload successful!');
+
+            return {
+                success: true,
+                message: 'Firmware uploaded successfully. Device will reboot.'
+            };
+
+        } catch (error) {
+            console.error('[BLE-OTA] Upload error:', error);
+            
+            // Try to abort OTA on error
+            try {
+                if (this.otaControlChar) {
+                    await this.otaControlChar.writeValue(new TextEncoder().encode('ABORT'));
+                }
+            } catch (abortError) {
+                console.error('[BLE-OTA] Abort error:', abortError);
+            }
+
+            throw error;
+        }
+    }
+
+    /**
+     * Wait for specific status from device
+     */
+    async waitForStatus(expectedStatus, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error(`Timeout waiting for status: ${expectedStatus}`));
+            }, timeoutMs);
+
+            const statusHandler = (status) => {
+                if (status === expectedStatus) {
+                    clearTimeout(timeout);
+                    this.onStatusCallback = null;
+                    resolve();
+                } else if (status.startsWith('ERROR:')) {
+                    clearTimeout(timeout);
+                    this.onStatusCallback = null;
+                    reject(new Error(status));
+                }
+            };
+
+            this.onStatusCallback = statusHandler;
+        });
+    }
+
+    /**
+     * Set progress callback
+     */
+    setProgressCallback(callback) {
+        this.onProgressCallback = callback;
+    }
+
+    /**
+     * Disconnect
+     */
+    disconnect() {
+        this.device = null;
+        this.otaControlChar = null;
+        this.otaDataChar = null;
+        this.otaStatusChar = null;
+        this.onProgressCallback = null;
+        this.onStatusCallback = null;
+    }
+}
+
+// Global instance
+const bleOtaClient = new BleOtaClient();
+

@@ -1,0 +1,29 @@
+{
+  "name": "esp32-remote-control-webapp",
+  "version": "1.0.0",
+  "description": "ESP32-S3 Remote Control WebApp for Bluefy - BLE Provisioning + OTA + Debug Monitor",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 -o",
+    "dev": "npx http-server -p 8080",
+    "build": "echo 'No build step required'",
+    "test": "echo 'No tests configured'"
+  },
+  "keywords": [
+    "esp32",
+    "ble",
+    "provisioning",
+    "ota",
+    "firmware",
+    "web-bluetooth",
+    "bluefy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

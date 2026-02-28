@@ -1,0 +1,535 @@
+/* ========================================================================== */
+/* ESP32-S3 Remote Control WebApp - Styles */
+/* Designed for iPad + Bluefy Browser */
+/* ========================================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --color-primary: #3498db;
+    --color-secondary: #2ecc71;
+    --color-danger: #e74c3c;
+    --color-warning: #f39c12;
+    --color-info: #9b59b6;
+    --color-bg: #f8f9fa;
+    --color-card: #ffffff;
+    --color-text: #2c3e50;
+    --color-text-light: #7f8c8d;
+    --color-border: #ecf0f1;
+    --color-success: #27ae60;
+    --color-error: #c0392b;
+    --color-connected: #2ecc71;
+    --color-disconnected: #95a5a6;
+    
+    --radius: 8px;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --transition: all 0.3s ease;
+    
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-size-body: 16px;
+    --font-size-small: 14px;
+    --font-size-large: 18px;
+}
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-body);
+    color: var(--color-text);
+    background-color: var(--color-bg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ========================================================================== */
+/* Header */
+/* ========================================================================== */
+
+header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 20px 0;
+    border-bottom: 2px solid var(--color-border);
+}
+
+header h1 {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-bottom: 8px;
+}
+
+header .subtitle {
+    font-size: var(--font-size-small);
+    color: var(--color-text-light);
+}
+
+/* ========================================================================== */
+/* Main Content */
+/* ========================================================================== */
+
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.card {
+    background-color: var(--color-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    transition: var(--transition);
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card h2 {
+    font-size: var(--font-size-large);
+    margin-bottom: 16px;
+    color: var(--color-primary);
+    border-bottom: 2px solid var(--color-border);
+    padding-bottom: 12px;
+}
+
+.section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ========================================================================== */
+/* Status Display */
+/* ========================================================================== */
+
+.status-display {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    background-color: var(--color-bg);
+    border-radius: calc(var(--radius) - 4px);
+    border-left: 4px solid var(--color-border);
+}
+
+.status-label {
+    font-weight: 500;
+    color: var(--color-text-light);
+    font-size: var(--font-size-small);
+}
+
+.status-value {
+    font-weight: 600;
+    color: var(--color-text);
+    text-align: right;
+}
+
+.status-value.connected {
+    color: var(--color-connected);
+}
+
+.status-value.disconnected {
+    color: var(--color-disconnected);
+}
+
+.status-value.active {
+    color: var(--color-success);
+}
+
+.status-value.danger {
+    color: var(--color-error);
+}
+
+/* ========================================================================== */
+/* Form Styles */
+/* ========================================================================== */
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-weight: 500;
+    font-size: var(--font-size-small);
+    color: var(--color-text);
+}
+
+.form-group input,
+.form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: calc(var(--radius) - 4px);
+    font-size: var(--font-size-body);
+    font-family: var(--font-family);
+    transition: var(--transition);
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-group input:disabled {
+    background-color: var(--color-bg);
+    color: var(--color-text-light);
+    cursor: not-allowed;
+}
+
+.form-group input[type="file"] {
+    padding: 8px;
+    cursor: pointer;
+}
+
+.input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.input-group input {
+    flex: 1;
+}
+
+/* ========================================================================== */
+/* Button Styles */
+/* ========================================================================== */
+
+.button-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: calc(var(--radius) - 4px);
+    font-size: var(--font-size-body);
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex: 1;
+    min-width: 120px;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: #2980b9;
+}
+
+.btn-secondary {
+    background-color: var(--color-text-light);
+    color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #6c7a7d;
+}
+
+.btn-success {
+    background-color: var(--color-success);
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: #229954;
+}
+
+.btn-danger {
+    background-color: var(--color-danger);
+    color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: #c0392b;
+}
+
+/* ========================================================================== */
+/* Message Styles */
+/* ========================================================================== */
+
+.error-message,
+.info-message,
+.success-message,
+.warning-message {
+    padding: 12px;
+    border-radius: calc(var(--radius) - 4px);
+    font-size: var(--font-size-small);
+    display: none;
+    word-wrap: break-word;
+}
+
+.error-message {
+    background-color: #fadbd8;
+    color: var(--color-error);
+    border-left: 4px solid var(--color-error);
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+.info-message {
+    background-color: #d6eaf8;
+    color: var(--color-primary);
+    border-left: 4px solid var(--color-primary);
+    display: none;
+}
+
+.info-message.show {
+    display: block;
+}
+
+.success-message {
+    background-color: #d5f4e6;
+    color: var(--color-success);
+    border-left: 4px solid var(--color-success);
+    display: none;
+}
+
+.success-message.show {
+    display: block;
+}
+
+.warning-message {
+    background-color: #fdebd0;
+    color: var(--color-warning);
+    border-left: 4px solid var(--color-warning);
+    display: none;
+}
+
+.warning-message.show {
+    display: block;
+}
+
+/* ========================================================================== */
+/* Progress Bar */
+/* ========================================================================== */
+
+.progress-container {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background-color: var(--color-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    min-width: 50px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--color-primary);
+    font-size: var(--font-size-small);
+}
+
+/* ========================================================================== */
+/* Log Window (Debug Monitor) */
+/* ========================================================================== */
+
+.log-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.log-window {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: calc(var(--radius) - 4px);
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    line-height: 1.4;
+}
+
+.log-line {
+    margin: 2px 0;
+    word-wrap: break-word;
+}
+
+.log-line.log-debug {
+    color: #608b4e;
+}
+
+.log-line.log-info {
+    color: #569cd6;
+}
+
+.log-line.log-warn {
+    color: #dcdcaa;
+}
+
+.log-line.log-error {
+    color: #f48771;
+}
+
+.log-window::-webkit-scrollbar {
+    width: 6px;
+}
+
+.log-window::-webkit-scrollbar-track {
+    background: #2d2d2d;
+    border-radius: 3px;
+}
+
+.log-window::-webkit-scrollbar-thumb {
+    background: #464646;
+    border-radius: 3px;
+}
+
+.log-window::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+}
+
+/* ========================================================================== */
+/* Footer */
+/* ========================================================================== */
+
+footer {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+.footer-text {
+    font-size: var(--font-size-small);
+    color: var(--color-text-light);
+}
+
+/* ========================================================================== */
+/* Responsive Design */
+/* ========================================================================== */
+
+@media (max-width: 768px) {
+    .container {
+        padding: 12px;
+    }
+
+    header h1 {
+        font-size: 24px;
+    }
+
+    .card {
+        padding: 16px;
+    }
+
+    .button-group {
+        flex-direction: column;
+    }
+
+    .btn {
+        min-width: auto;
+    }
+
+    .status-display {
+        grid-template-columns: 1fr;
+    }
+
+    .log-window {
+        height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 8px;
+    }
+
+    header h1 {
+        font-size: 20px;
+    }
+
+    header {
+        margin-bottom: 16px;
+    }
+
+    .card {
+        padding: 12px;
+    }
+
+    main {
+        gap: 12px;
+    }
+
+    .card h2 {
+        font-size: var(--font-size-large);
+        margin-bottom: 12px;
+    }
+
+    .log-window {
+        height: 200px;
+        font-size: 12px;
+    }
+
+    .status-value {
+        font-size: var(--font-size-small);
+    }
+}
