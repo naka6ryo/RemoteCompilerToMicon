@@ -67,6 +67,38 @@ class BLEClient {
     }
 
     /**
+     * List all available BLE services (debug)
+     */
+    async _listAllServices() {
+        try {
+            const services = await this.server.getPrimaryServices();
+            console.log('[BLE] Available services count:', services.length);
+            
+            for (const service of services) {
+                console.log(`[BLE] Service: ${service.uuid}`);
+                
+                try {
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        console.log(`  ├─ Characteristic: ${char.uuid}`);
+                        console.log(`  │  Properties:`, {
+                            read: char.properties.read,
+                            write: char.properties.write,
+                            writeWithoutResponse: char.properties.writeWithoutResponse,
+                            notify: char.properties.notify,
+                            indicate: char.properties.indicate
+                        });
+                    }
+                } catch (e) {
+                    console.warn(`[BLE] Could not enumerate characteristics for service ${service.uuid}:`, e.message);
+                }
+            }
+        } catch (error) {
+            console.error('[BLE] Failed to list services:', error.message);
+        }
+    }
+
+    /**
      * Get debug service and characteristics
      */
     async _getDebugService() {
@@ -77,12 +109,14 @@ class BLEClient {
             // Get DebugLogTx (Notify)
             try {
                 this.characteristics.logTx = await this.service.getCharacteristic(BLE_UUIDS.DEBUG_LOG_TX_UUID);
+                console.log('[BLE] DebugLogTx characteristic obtained');
                 await this.characteristics.logTx.startNotifications();
+                console.log('[BLE] DebugLogTx notifications STARTED');
                 this.characteristics.logTx.addEventListener('characteristicvaluechanged', 
                     (event) => this._onLogNotify(event));
-                console.log('[BLE] DebugLogTx subscribed');
+                console.log('[BLE] DebugLogTx event listener attached');
             } catch (e) {
-                console.warn('[BLE] DebugLogTx not available:', e.message);
+                console.error('[BLE] DebugLogTx ERROR:', e.message);
             }
 
             // Get DebugCmdRx (Write)
@@ -90,22 +124,24 @@ class BLEClient {
                 this.characteristics.cmdRx = await this.service.getCharacteristic(BLE_UUIDS.DEBUG_CMD_RX_UUID);
                 console.log('[BLE] DebugCmdRx available');
             } catch (e) {
-                console.warn('[BLE] DebugCmdRx not available:', e.message);
+                console.error('[BLE] DebugCmdRx ERROR:', e.message);
             }
 
             // Get DebugStat (Read/Notify)
             try {
                 this.characteristics.stat = await this.service.getCharacteristic(BLE_UUIDS.DEBUG_STAT_UUID);
+                console.log('[BLE] DebugStat characteristic obtained');
                 await this.characteristics.stat.startNotifications();
+                console.log('[BLE] DebugStat notifications STARTED');
                 this.characteristics.stat.addEventListener('characteristicvaluechanged',
                     (event) => this._onStatNotify(event));
-                console.log('[BLE] DebugStat subscribed');
+                console.log('[BLE] DebugStat event listener attached');
             } catch (e) {
-                console.warn('[BLE] DebugStat not available:', e.message);
+                console.error('[BLE] DebugStat ERROR:', e.message);
             }
 
         } catch (error) {
-            console.warn('[BLE] Debug service not found:', error.message);
+            console.error('[BLE] Debug service NOT found:', error.message);
             throw new Error(ERROR_MESSAGES.BLE_SERVICE_NOT_FOUND);
         }
     }
@@ -136,11 +172,38 @@ class BLEClient {
         const decoder = new TextDecoder();
         const logLine = decoder.decode(value);
         
-        console.log('[BLE Log]', logLine);
+        console.log('[BLE] ===== NOTIFICATION RECEIVED =====');
+        console.log('[BLE] Raw bytes:', new Uint8Array(value.buffer));
+        console.log('[BLE] Decoded message:', logLine);
+        console.log('[BLE] onLogReceived exists?', this.onLogReceived !== null && this.onLogReceived !== undefined);
+        console.log('[BLE] onLogReceived type:', typeof this.onLogReceived);
+        
+        // Update UI status
+        if (typeof uiManager !== 'undefined') {
+            uiManager.incrementBleRx();
+        }
         
         if (this.onLogReceived) {
-            this.onLogReceived(logLine);
+            console.log('[BLE] ✓ Calling onLogReceived callback...');
+            try {
+                this.onLogReceived(logLine);
+                console.log('[BLE] ✓ Callback executed successfully');
+            } catch (error) {
+                console.error('[BLE] ✗ Callback execution error:', error);
+                if (typeof uiManager !== 'undefined') {
+                    uiManager.updateDebugStatus('ERROR: Callback execution failed', 'error');
+                }
+            }
+        } else {
+            console.error('[BLE] ✗✗✗ CRITICAL ERROR: onLogReceived callback NOT SET! ✗✗✗');
+            console.error('[BLE] Message lost:', logLine);
+            // Try to show on UI if available
+            if (typeof uiManager !== 'undefined') {
+                uiManager.updateDebugStatus('CRITICAL: onLogReceived NOT SET', 'error');
+                uiManager.updateCallbackStatus(false);
+            }
         }
+        console.log('[BLE] ===== END NOTIFICATION =====');
     }
 
     /**
