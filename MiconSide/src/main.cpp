@@ -116,6 +116,7 @@ const unsigned long REBOOT_DELAY_MS = 2000;
 unsigned long boot_timestamp = 0;
 const unsigned long WIFI_OTA_TIMEOUT_MS = 60000; // 1 minute
 bool wifi_ota_timeout_passed = false;
+bool wifi_ota_timeout_deferred_logged = false;
 
 void status_led_init()
 {
@@ -292,6 +293,11 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks
             }
             else if (command == "OTA_MODE")
             {
+                if (wifi_ota_timeout_passed)
+                {
+                    log_println("[W] OTA mode disabled after 60s timeout");
+                    return;
+                }
                 log_println("[I] OTA mode activation requested via BLE");
                 ota_mode_active = true;
                 log_println("[I] OTA mode activated - ready to receive firmware data");
@@ -424,7 +430,9 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks
         log_println(msg.c_str());
 
         // Check if WiFi/OTA timeout has passed
-        if (wifi_ota_timeout_passed)
+        // Allow END/ABORT for in-progress session even after timeout
+        bool is_end_or_abort = (command == "END" || command == "ABORT");
+        if (wifi_ota_timeout_passed && !(is_end_or_abort && ota_in_progress))
         {
             log_println("[W] OTA mode disabled after 60s timeout");
             if (pOtaStatus)
@@ -986,21 +994,28 @@ void loop()
     // Check if WiFi/OTA timeout has passed (60 seconds after boot)
     if (!wifi_ota_timeout_passed && (millis() - boot_timestamp >= WIFI_OTA_TIMEOUT_MS))
     {
-        wifi_ota_timeout_passed = true;
-        log_println("[I] === OTA timeout activated ===");
-        log_println("[I] OTA and WiFi provisioning disabled after 60s");
-        log_println("[I] WiFi connection will be maintained");
-
-        // Disable OTA mode if active
-        if (ota_mode_active)
+        // Do not interrupt ongoing OTA write. Defer timeout activation.
+        if (ota_in_progress)
         {
-            log_println("[W] Disabling OTA mode (timeout)");
-            if (ota_in_progress)
+            if (!wifi_ota_timeout_deferred_logged)
             {
-                Update.abort();
-                ota_in_progress = false;
+                log_println("[I] OTA timeout deferred while write is in progress");
+                wifi_ota_timeout_deferred_logged = true;
             }
-            ota_mode_active = false;
+        }
+        else
+        {
+            wifi_ota_timeout_passed = true;
+            log_println("[I] === OTA timeout activated ===");
+            log_println("[I] OTA and WiFi provisioning disabled after 60s");
+            log_println("[I] WiFi connection will be maintained");
+
+            // Disable OTA mode if active (only when not writing)
+            if (ota_mode_active)
+            {
+                log_println("[W] Disabling OTA mode (timeout)");
+                ota_mode_active = false;
+            }
         }
     }
 
