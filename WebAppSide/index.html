@@ -3,7 +3,22 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>ZZZ Expanded Log Command Deck Light Mode</title>
+    <title>BLE COMPILER</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="icon.png"/>
+    
+    <!-- Open Graph / Social Media Preview -->
+    <meta property="og:title" content="BLE COMPILER"/>
+    <meta property="og:description" content="BLE-enabled remote compiler for microcontrollers"/>
+    <meta property="og:image" content="https://ble-compiler.netlify.app/samnail.png"/>
+    <meta property="og:url" content="https://ble-compiler.netlify.app/"/>
+    <meta property="og:type" content="website"/>
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="BLE COMPILER"/>
+    <meta name="twitter:description" content="BLE-enabled remote compiler for microcontrollers"/>
+    <meta name="twitter:image" content="https://ble-compiler.netlify.app/samnail.png"/>
+    
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=Teko:wght@400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
@@ -385,7 +400,7 @@
 </div>
 <h2 class="font-teko text-lg uppercase text-slate-900 leading-none">Inter-Knot Uplink</h2>
 </div>
-<div class="relative z-10 flex flex-col">
+<form id="wifi-form" class="relative z-10 flex flex-col">
 <div class="grid grid-cols-2 gap-1.5 mb-2">
 <div class="space-y-0.5">
 <label class="text-[8px] font-mono-tech text-slate-500 uppercase font-bold pl-1">SSID</label>
@@ -408,7 +423,7 @@
 Upload Config
 </button>
 </div>
-</div>
+</form>
 <div class="flex justify-between items-center mt-auto pt-1 border-t border-dashed border-slate-200 text-xs">
 <span class="font-teko text-slate-400 uppercase">Assigned IP</span>
 <span class="font-mono-tech text-black bg-[var(--hdd-cyan)] px-1.5 py-0.5 border border-black text-[8px] font-bold shadow-sm" id="device-ip">0.0.0.0</span>

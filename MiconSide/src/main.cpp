@@ -14,6 +14,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <esp32-hal-rgb-led.h>
 
 // =============================================================================
 // Constants & Configuration
@@ -27,6 +28,13 @@
 // Wi-Fi
 #define WIFI_SSID_MAX 32
 #define WIFI_PASS_MAX 64
+
+// BLE Output
+#define BLE_OUTPUT_INTERVAL_MS 1000
+
+// Status LED (ESP32-S3 Super Mini compatibility)
+#define STATUS_LED_GPIO_PIN 47
+#define STATUS_LED_RGB_PIN 48
 
 // NVS Namespace
 const char *NVS_WIFI_NS = "wifi";
@@ -97,8 +105,37 @@ size_t ota_last_reported_size = 0;
 bool ota_in_progress = false;
 bool ota_finalize_requested = false;
 bool ota_abort_requested = false;
+bool provisioning_in_progress = false;
+
+// Reboot management
+bool reboot_requested = false;
+unsigned long reboot_timestamp = 0;
+const unsigned long REBOOT_DELAY_MS = 2000;
+
+// Power saving: WiFi/OTA timeout after boot
+unsigned long boot_timestamp = 0;
+const unsigned long WIFI_OTA_TIMEOUT_MS = 60000; // 1 minute
+bool wifi_ota_timeout_passed = false;
+
+void status_led_init()
+{
+    pinMode(STATUS_LED_GPIO_PIN, OUTPUT);
+    digitalWrite(STATUS_LED_GPIO_PIN, HIGH);
+    neopixelWrite(STATUS_LED_RGB_PIN, 0, 0, 0);
+}
+
+void status_led_blink_aws()
+{
+    digitalWrite(STATUS_LED_GPIO_PIN, LOW);
+    neopixelWrite(STATUS_LED_RGB_PIN, 0, 24, 0);
+    delay(120);
+    digitalWrite(STATUS_LED_GPIO_PIN, HIGH);
+    neopixelWrite(STATUS_LED_RGB_PIN, 0, 0, 0);
+}
 
 bool ble_device_connected = false;
+
+void log_println(const char *msg);
 
 // =============================================================================
 // Utility Functions
@@ -112,8 +149,8 @@ void log_println(const char *msg)
         Serial.flush();
     }
 
-    // Send via BLE if connected (real-time only) - but NOT during OTA
-    if (ble_device_connected && pDebugLogTx && !ota_in_progress)
+    // Send via BLE if connected (real-time only) - but NOT during OTA or provisioning
+    if (ble_device_connected && pDebugLogTx && !ota_in_progress && !provisioning_in_progress)
     {
         size_t len = strlen(msg);
         if (len > 0)
@@ -157,6 +194,12 @@ esp_err_t wifi_mgr_connect(void)
         return ESP_FAIL;
     }
 
+    // Debug: Show what we're trying to connect to
+    char debug_msg[128];
+    snprintf(debug_msg, sizeof(debug_msg), "[I] Connecting to SSID: '%s' (len=%d, pass_len=%d)",
+             ssid, ssid_len, pass_len);
+    log_println(debug_msg);
+
     log_println("[I] Starting Wi-Fi connection...");
     g_state.wifi_state = WIFI_CONNECTING;
 
@@ -184,6 +227,15 @@ class MyServerCallbacks : public BLEServerCallbacks
     {
         ble_device_connected = true;
         log_println("[I] BLE device connected");
+
+        // Send initial status immediately on connection
+        delay(100); // Give BLE stack time to settle
+
+        char status[128];
+        snprintf(status, sizeof(status), "[STATUS] WIFI=%d, OTA=%s",
+                 g_state.wifi_state,
+                 ota_mode_active ? "ACTIVE" : "IDLE");
+        log_println(status);
     }
 
     void onDisconnect(BLEServer *pServer)
@@ -203,8 +255,11 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks
             String command = String(rxValue.c_str());
             command.trim();
 
-            Serial.print("[BLE RX] ");
-            Serial.println(command);
+            // Log via BLE as well
+            char ble_log[128];
+            snprintf(ble_log, sizeof(ble_log), "[BLE RX] %s", command.c_str());
+            log_println(ble_log);
+            Serial.println("[BLE RX] Command received via Serial");
 
             // Handle special commands
             if (command == "RESET_NVS" || command == "FACTORY_RESET")
@@ -222,8 +277,10 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks
                 nvs_syscfg.end();
 
                 log_println("[I] NVS cleared. Rebooting in 2 seconds...");
-                delay(2000);
-                ESP.restart();
+
+                // Schedule reboot
+                reboot_requested = true;
+                reboot_timestamp = millis();
             }
             else if (command == "STATUS")
             {
@@ -247,10 +304,21 @@ class ProvisioningCallbacks : public BLECharacteristicCallbacks
 {
     void onWrite(BLECharacteristic *pCharacteristic)
     {
+        // Check if WiFi/OTA timeout has passed
+        if (wifi_ota_timeout_passed)
+        {
+            log_println("[W] WiFi provisioning disabled after 60s timeout");
+            return;
+        }
+
+        // Set flag to suppress BLE log output during provisioning
+        provisioning_in_progress = true;
+
         std::string rxValue = pCharacteristic->getValue();
         if (rxValue.length() == 0)
         {
             log_println("[E] Empty provisioning data");
+            provisioning_in_progress = false;
             return;
         }
 
@@ -261,6 +329,7 @@ class ProvisioningCallbacks : public BLECharacteristicCallbacks
         if (separatorIndex == -1)
         {
             log_println("[E] Invalid provisioning format (no separator)");
+            provisioning_in_progress = false;
             return;
         }
 
@@ -270,18 +339,30 @@ class ProvisioningCallbacks : public BLECharacteristicCallbacks
         if (ssid.length() == 0 || ssid.length() > WIFI_SSID_MAX)
         {
             log_println("[E] Invalid SSID length");
+            provisioning_in_progress = false;
             return;
         }
 
         if (password.length() > WIFI_PASS_MAX)
         {
             log_println("[E] Invalid password length");
+            provisioning_in_progress = false;
             return;
         }
 
         log_println("[I] Received Wi-Fi credentials via BLE");
-        Serial.print("[I] SSID: ");
-        Serial.println(ssid);
+
+        // Log SSID and lengths (Serial only during provisioning)
+        char ssid_info[128];
+        snprintf(ssid_info, sizeof(ssid_info), "[I] SSID: %s", ssid.c_str());
+        log_println(ssid_info);
+
+        char len_info[64];
+        snprintf(len_info, sizeof(len_info), "[I] SSID length: %d", ssid.length());
+        log_println(len_info);
+
+        snprintf(len_info, sizeof(len_info), "[I] Password length: %d", password.length());
+        log_println(len_info);
 
         // Save to NVS
         nvs_wifi.begin(NVS_WIFI_NS, false);
@@ -289,16 +370,35 @@ class ProvisioningCallbacks : public BLECharacteristicCallbacks
         nvs_wifi.putString("pass", password.c_str());
         nvs_wifi.end();
 
+        // Verify what was saved
+        char verify_ssid[WIFI_SSID_MAX] = {0};
+        nvs_wifi.begin(NVS_WIFI_NS, true);
+        size_t verify_len = nvs_wifi.getString("ssid", verify_ssid, sizeof(verify_ssid));
+        nvs_wifi.end();
+
+        char verify_info[128];
+        snprintf(verify_info, sizeof(verify_info), "[I] Verified saved SSID: %s", verify_ssid);
+        log_println(verify_info);
+
+        snprintf(verify_info, sizeof(verify_info), "[I] Verified SSID length: %d", verify_len);
+        log_println(verify_info);
+
         // Mark as provisioned
         nvs_syscfg.begin(NVS_SYSCFG_NS, false);
         nvs_syscfg.putUChar("prov", 1);
         nvs_syscfg.end();
 
-        log_println("[I] Wi-Fi config saved! Connecting to Wi-Fi...");
+        log_println("[I] Wi-Fi config saved! Device will reboot in 2 seconds...");
 
-        // Update state and start WiFi connection
-        g_state.system_state = STATE_PROVISIONING;
-        wifi_mgr_connect();
+        // Clear flag to allow final log messages to be sent via BLE
+        provisioning_in_progress = false;
+
+        // Request reboot (will be executed in main loop after callback returns)
+        // This ensures BLE write response is sent back to client before reboot
+        reboot_requested = true;
+        reboot_timestamp = millis();
+
+        log_println("[I] Reboot scheduled...");
     }
 };
 
@@ -322,6 +422,18 @@ class OtaControlCallbacks : public BLECharacteristicCallbacks
 
         String msg = "[OTA] Control command: " + command;
         log_println(msg.c_str());
+
+        // Check if WiFi/OTA timeout has passed
+        if (wifi_ota_timeout_passed)
+        {
+            log_println("[W] OTA mode disabled after 60s timeout");
+            if (pOtaStatus)
+            {
+                pOtaStatus->setValue("ERROR:TIMEOUT");
+                pOtaStatus->notify();
+            }
+            return;
+        }
 
         // Format: START:<size> or END
         if (command.startsWith("START:"))
@@ -690,9 +802,26 @@ void wifi_event_handler(WiFiEvent_t event)
     }
 
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+    {
         g_state.wifi_state = WIFI_FAILED;
-        log_println("[W] Wi-Fi disconnected");
+
+        // Get detailed disconnect reason
+        char reason_msg[128];
+        snprintf(reason_msg, sizeof(reason_msg),
+                 "[W] Wi-Fi disconnected (status=%d)", WiFi.status());
+        log_println(reason_msg);
+
+        // Additional debug info
+        if (WiFi.status() == WL_NO_SSID_AVAIL)
+        {
+            log_println("[E] SSID not found - check if SSID is correct");
+        }
+        else if (WiFi.status() == WL_CONNECT_FAILED)
+        {
+            log_println("[E] Connection failed - check password");
+        }
         break;
+    }
 
     default:
         break;
@@ -705,6 +834,8 @@ void wifi_event_handler(WiFiEvent_t event)
 
 void setup()
 {
+    boot_timestamp = millis(); // Record boot time for power-saving mode
+
     Serial.begin(SERIAL_BAUD);
     delay(500);
 
@@ -751,6 +882,9 @@ void setup()
     log_println("[Setup] Initializing WiFi...");
     wifi_mgr_init();
 
+    // Setup status LED
+    status_led_init();
+
     delay(500); // Give time for WiFi stack to initialize
 
     log_println("[Setup] Initializing BLE...");
@@ -773,6 +907,20 @@ void setup()
 
 void loop()
 {
+    // Handle reboot request (e.g., after WiFi provisioning)
+    if (reboot_requested)
+    {
+        unsigned long elapsed = millis() - reboot_timestamp;
+        if (elapsed >= REBOOT_DELAY_MS)
+        {
+            log_println("[I] Rebooting now...");
+            delay(100); // Give time for final log to be sent
+            ESP.restart();
+        }
+        // Don't process other operations while reboot is pending
+        return;
+    }
+
     // Handle OTA finalization request (moved from BLE callback to avoid stack issues)
     if (ota_finalize_requested)
     {
@@ -835,6 +983,27 @@ void loop()
         }
     }
 
+    // Check if WiFi/OTA timeout has passed (60 seconds after boot)
+    if (!wifi_ota_timeout_passed && (millis() - boot_timestamp >= WIFI_OTA_TIMEOUT_MS))
+    {
+        wifi_ota_timeout_passed = true;
+        log_println("[I] === OTA timeout activated ===");
+        log_println("[I] OTA and WiFi provisioning disabled after 60s");
+        log_println("[I] WiFi connection will be maintained");
+
+        // Disable OTA mode if active
+        if (ota_mode_active)
+        {
+            log_println("[W] Disabling OTA mode (timeout)");
+            if (ota_in_progress)
+            {
+                Update.abort();
+                ota_in_progress = false;
+            }
+            ota_mode_active = false;
+        }
+    }
+
     // If OTA mode is active, stop normal app operation
     if (ota_mode_active)
     {
@@ -843,13 +1012,70 @@ void loop()
         return;
     }
 
-    // Wi-Fi state monitoring
-    if (g_state.wifi_state == WIFI_CONNECTING)
+    // Wi-Fi state monitoring and auto-reconnect management
+    static unsigned long last_wifi_check = 0;
+    static unsigned long last_wifi_reconnect_try = 0;
+    static unsigned long wifi_connect_start_time = 0;
+
+    if (millis() - last_wifi_check > 5000) // Check WiFi state every 5 seconds
     {
-        if (WiFi.status() == WL_CONNECTED)
+        last_wifi_check = millis();
+
+        if (g_state.wifi_state == WIFI_CONNECTING)
         {
-            // Will be handled by event handler
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                // Will be handled by event handler
+            }
+            else
+            {
+                // Check for connection timeout (30 seconds)
+                if (wifi_connect_start_time > 0 &&
+                    (millis() - wifi_connect_start_time > 30000))
+                {
+                    log_println("[E] WiFi connection timeout - marking as failed");
+                    g_state.wifi_state = WIFI_FAILED;
+                    wifi_connect_start_time = 0;
+                    WiFi.disconnect();
+                }
+            }
         }
+
+        // Auto-reconnect: if WiFi config exists but not connected, try to connect
+        if ((g_state.wifi_state == WIFI_IDLE || g_state.wifi_state == WIFI_FAILED) &&
+            (millis() - last_wifi_reconnect_try > 30000)) // Retry every 30 seconds
+        {
+            char ssid[WIFI_SSID_MAX] = {0};
+            nvs_wifi.begin(NVS_WIFI_NS, true);
+            size_t ssid_len = nvs_wifi.getString("ssid", ssid, sizeof(ssid));
+            nvs_wifi.end();
+
+            if (ssid_len > 0) // WiFi config exists
+            {
+                log_println("[I] Loop: WiFi config found, initiating connection...");
+                last_wifi_reconnect_try = millis();
+                wifi_connect_start_time = millis();
+                wifi_mgr_connect();
+            }
+        }
+        else if (g_state.wifi_state == WIFI_CONNECTING && wifi_connect_start_time == 0)
+        {
+            // Initialize connection start time if not set
+            wifi_connect_start_time = millis();
+        }
+    }
+
+    // BLE Output: Send "Hello World via BLE" every 1 second
+    static unsigned long last_ble_output = 0;
+    if (ble_device_connected && pDebugLogTx && millis() - last_ble_output >= BLE_OUTPUT_INTERVAL_MS)
+    {
+        last_ble_output = millis();
+        const char *msg = "Hello World via BLE";
+        pDebugLogTx->setValue((uint8_t *)msg, strlen(msg));
+        pDebugLogTx->notify();
+
+        // Blink status LED when sending BLE message
+        status_led_blink_aws();
     }
 
     // Every 10 seconds, update BLE debug stat
@@ -870,22 +1096,6 @@ void loop()
             pDebugStat->setValue((uint8_t *)stat_str, strlen(stat_str));
             pDebugStat->notify();
         }
-    }
-
-    // Simulate normal app operation with periodic Hello World on UART
-    static unsigned long last_app_update = 0;
-    if (millis() - last_app_update > 30000)
-    {
-        last_app_update = millis();
-
-        // This is the app core functionality
-        Serial.println("\n[App Core] ======================================");
-        Serial.println("[App Core] Hello World via Serial (UART)");
-        Serial.println("[App Core] This is the embedded application running on ESP32-S3");
-        Serial.println("[App Core] Current system state: " + String(g_state.system_state));
-        Serial.println("[App Core] Wi-Fi state: " + String(g_state.wifi_state));
-        Serial.println("[App Core] OTA mode: " + String(ota_mode_active ? "ACTIVE" : "IDLE"));
-        Serial.println("[App Core] ======================================\n");
     }
 
     delay(100);

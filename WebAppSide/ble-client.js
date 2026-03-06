@@ -327,12 +327,45 @@ class BLEClient {
             const encoder = new TextEncoder();
             const data = encoder.encode(configData);
             
-            await this.characteristics.wifiConfig.writeValue(data);
-            console.log('[BLE] WiFi credentials sent');
+            console.log('[BLE] Sending WiFi config...');
+            console.log('[BLE] SSID:', ssid);
+            console.log('[BLE] Password length:', password.length);
+            console.log('[BLE] Total data size:', data.length, 'bytes');
+            console.log('[BLE] Data bytes:', Array.from(data));
+            console.log('[BLE] Characteristic properties:', this.characteristics.wifiConfig.properties);
+            
+            // Check data size
+            if (data.length > 512) {
+                throw new Error(`Data too large: ${data.length} bytes (max 512)`);
+            }
+            
+            // Small delay before write to ensure BLE is ready
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Try write with response first
+            try {
+                await this.characteristics.wifiConfig.writeValue(data);
+                console.log('[BLE] WiFi credentials sent successfully (with response)');
+            } catch (writeError) {
+                console.warn('[BLE] Write with response failed, trying without response...', writeError);
+                // Fallback to write without response if available
+                if (this.characteristics.wifiConfig.properties.writeWithoutResponse) {
+                    await this.characteristics.wifiConfig.writeValueWithoutResponse(data);
+                    console.log('[BLE] WiFi credentials sent successfully (without response)');
+                    // Give device time to process
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                    throw writeError;
+                }
+            }
+            
             return true;
 
         } catch (error) {
             console.error('[BLE] Send WiFi credentials error:', error);
+            console.error('[BLE] Error name:', error.name);
+            console.error('[BLE] Error message:', error.message);
+            console.error('[BLE] Error code:', error.code);
             throw error;
         }
     }

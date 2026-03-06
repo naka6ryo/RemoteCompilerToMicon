@@ -419,16 +419,35 @@ class ESP32RemoteApp {
             this.logToUI('[Wi-Fi] Sending via BLE...');
             
             // Send WiFi credentials via BLE provisioning service
-            await bleClient.sendWiFiCredentials(formValues.ssid, formValues.password);
+            // Note: Device will reboot after receiving, which causes disconnection
+            let configSent = false;
+            try {
+                await bleClient.sendWiFiCredentials(formValues.ssid, formValues.password);
+                configSent = true;
+            } catch (error) {
+                // Check if error is due to device rebooting (expected behavior)
+                if (error.message && error.message.includes('GATT Server is disconnected')) {
+                    // Device rebooted - this is expected and means success
+                    this.logToUI('[Wi-Fi] ℹ️  Device disconnected (expected - device is rebooting)');
+                    configSent = true;
+                } else {
+                    // Real error - re-throw
+                    throw error;
+                }
+            }
             
-            this.logToUI('[Wi-Fi] ✓ BLE transmission complete!');
-            uiManager.showSuccess('wifi-result', 'Wi-Fi configuration sent! Device will reboot and connect.');
-            this.logToUI('[Wi-Fi] Device will reboot in 2 seconds.');
-            this.logToUI('[Wi-Fi] After reboot, device will connect to WiFi.');
-            this.logToUI('[Info] To update firmware, use BLE OTA (Firmware Update panel).');
-            
-            // Clear form
-            uiManager.clearWiFiForm();
+            if (configSent) {
+                this.logToUI('[Wi-Fi] ✓ BLE transmission complete!');
+                uiManager.showSuccess('wifi-result', 'Wi-Fi configuration sent! Device will reboot automatically.');
+                this.logToUI('[Wi-Fi] ✅ Configuration saved to device');
+                this.logToUI('[Wi-Fi] 🔄 Device rebooting now...');
+                this.logToUI('[Wi-Fi] 📡 After reboot, device will connect to WiFi');
+                this.logToUI('[Wi-Fi] ⚠️  BLE connection lost (device rebooting)');
+                this.logToUI('[Info] To update firmware later, reconnect via BLE OTA');
+                
+                // Clear form
+                uiManager.clearWiFiForm();
+            }
 
         } catch (error) {
             console.error('[App] Wi-Fi config error:', error);
@@ -441,6 +460,29 @@ class ESP32RemoteApp {
                 this.logToUI('[Wi-Fi] ℹ Please try one of these options:');
                 this.logToUI('[Wi-Fi] 1. Click the "Reset Device" button to enable WiFi provisioning');
                 this.logToUI('[Wi-Fi] 2. Or check if the device firmware is up to date');
+            } else if (error.message && error.message.includes('GATT')) {
+                // Check if it's a disconnection error (which might have slipped through)
+                if (error.message.includes('disconnected')) {
+                    // This might be a late disconnection - treat as potential success
+                    this.logToUI('[Wi-Fi] ⚠️  Device disconnected unexpectedly');
+                    this.logToUI('[Wi-Fi] ℹ️  If device rebooted, configuration was successful');
+                    this.logToUI('[Wi-Fi] ℹ️  Please check if device connects to WiFi');
+                    uiManager.showError('wifi-error', 'Device disconnected - check if WiFi connected');
+                } else {
+                    // GATT operation failed - likely BLE communication issue
+                    uiManager.showError('wifi-error', error.message);
+                    this.logToUI(`[Wi-Fi] ❌ Error: ${error.message}`);
+                    this.logToUI('[Wi-Fi] 💡 Possible causes:');
+                    this.logToUI('[Wi-Fi]   • BLE connection is unstable - try reconnecting');
+                    this.logToUI('[Wi-Fi]   • Data size too large (SSID+password > 512 bytes)');
+                    this.logToUI('[Wi-Fi]   • Device is busy processing another operation');
+                    this.logToUI('[Wi-Fi]   • Device firmware may need updating');
+                    this.logToUI('[Wi-Fi] 🔧 Suggested solutions:');
+                    this.logToUI('[Wi-Fi]   1. Disconnect and reconnect BLE');
+                    this.logToUI('[Wi-Fi]   2. Use a shorter SSID or password');
+                    this.logToUI('[Wi-Fi]   3. Wait a few seconds and try again');
+                    this.logToUI('[Wi-Fi]   4. Check browser console for detailed error info');
+                }
             } else {
                 // Other error (timeout, invalid credentials, etc.)
                 uiManager.showError('wifi-error', error.message);
