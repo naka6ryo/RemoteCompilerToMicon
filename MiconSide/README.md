@@ -1,53 +1,316 @@
-# ESP32-S3 Super Mini - IoT Device Firmware (PlatformIO)
+# ESP32-S3 Super Mini - BLE COMPILER サンプルファームウェア
 
-MPU6050 加速度センサーを使った活動検知と AWS IoT Core へのデータ送信機能を備えた ESP32-S3 Super Mini 用のファームウェアです。BLE による Wi-Fi プロビジョニング、OTA アップデート、デバッグモニタ機能も搭載しています。
+このファームウェアは、**BLE経由でファームウェアを書き込めるサンプルプログラム**です。
 
-## 機能
+🌐 **WebApp:** https://ble-compiler.netlify.app/
 
-- ✅ MPU6050 加速度センサーによる活動検知（Run / Walk / None）
-- ✅ AWS IoT Core への MQTT 接続とセンサーデータ送信（5秒間隔）
-- ✅ BLE Wi-Fi プロビジョニング
-- ✅ BLE 経由のファームウェア OTA アップデート
-- ✅ BLE デバッグシリアルモニタ
-- ✅ ステータス LED（GPIO + RGB）制御
+## 📖 このファームウェアは何をするのか？
 
-## 必要なもの
+このプログラムは以下の機能を提供します：
 
-### ハードウェア
+1. **BLE接続** - iPadやスマホから接続可能
+2. **Wi-Fiプロビジョニング** - BLE経由でWi-Fi設定を受信（オプション）
+3. **BLE OTA** - BLE経由でファームウェアを更新（USBケーブル不要）
+4. **デバッグモニタ** - BLE経由でログをリアルタイム配信
+5. **サンプル動作** - 1秒ごとに「Hello World via BLE」を送信
 
-- ESP32-S3 Super Mini
-- MPU6050 加速度センサーモジュール（I2C 接続）
-- USB ケーブル（プログラム書き込み用）
-- ジャンパーワイヤー（MPU6050 接続用）
+**このサンプル動作（5番）を書き換えて、あなたの実装したい処理を追加できます！**
 
-**MPU6050 配線:**
+---
 
-- SDA: GPIO 12
-- SCL: GPIO 11
-- VCC: 3.3V
-- GND: GND
+## 🚀 クイックスタート
 
-### ソフトウェア
+### 1️⃣ 必要なもの
 
-- Python 3.x
-- PlatformIO CLI または VSCode + PlatformIO Extension
-- AWS IoT Core アカウント（証明書設定済み）
+| 項目             | 詳細                              |
+| ---------------- | --------------------------------- |
+| **ハード**       | ESP32-S3 Super Mini + USBケーブル |
+| **ソフトウェア** | Python 3.x + PlatformIO           |
 
-## インストール
+### 2️⃣ PlatformIOのインストール
 
-### 1. PlatformIO CLI のインストール（初回のみ）
+**VSCode拡張を使う場合（推奨）:**
+
+1. VSCode をインストール
+2. Extension で「PlatformIO」を検索・インストール
+3. VSCode を再起動
+
+**CLIを使う場合:**
 
 ```bash
 pip install platformio
 ```
 
-### 2. VSCode + PlatformIO Extension（推奨）
+### 3️⃣ ファームウェアを書き込む
 
-1. VSCode をインストール
-2. Extension で "PlatformIO" を検索・インストール
-3. VSCode を再起動
+**方法1: VSCode + PlatformIO（推奨）**
 
-## セットアップ
+1. VSCode で `MiconSide` フォルダを開く
+2. PlatformIO ツールバー → **Build** をクリック
+3. ESP32をUSBで接続
+4. **Upload** をクリック
+
+**方法2: CLI**
+
+```bash
+cd MiconSide
+pio run --target upload
+```
+
+### 4️⃣ 動作確認
+
+シリアルモニタで以下のようなログが表示されれば成功：
+
+```
+=== ESP32-S3 BOOT SEQUENCE STARTING ===
+[System] ESP32-S3 Starting...
+[Version] FW v1.0.0
+[Setup] Initializing WiFi...
+[Setup] Initializing BLE...
+[I] BLE initialized successfully
+[Setup] Initialization complete
+```
+
+### 5️⃣ WebAppから接続
+
+1. https://ble-compiler.netlify.app/ を開く
+2. **[Connect Device]** をクリックして「ESP32-S3-MICON」を選択
+3. **Debug Monitor** パネルで **[Subscribe]** をクリック
+4. 1秒ごとに「Hello World via BLE」が表示されることを確認
+
+---
+
+## 🔧 カスタマイズ方法（どこを書き換える？）
+
+### ✅ 基本：サンプル動作を書き換える
+
+`main.cpp` の `loop()` 関数の以下の部分を書き換えてください：
+
+#### 📍 書き換え箇所1: BLE出力（1秒ごと）
+
+```cpp
+// ファイル: src/main.cpp
+// 行: 1050付近
+
+// BLE Output: Send "Hello World via BLE" every 1 second
+static unsigned long last_ble_output = 0;
+if (ble_device_connected && pDebugLogTx && millis() - last_ble_output >= BLE_OUTPUT_INTERVAL_MS)
+{
+    last_ble_output = millis();
+
+    // ★★★ ここを書き換える ★★★
+    const char *msg = "Hello World via BLE";
+    pDebugLogTx->setValue((uint8_t *)msg, strlen(msg));
+    pDebugLogTx->notify();
+
+    // 例: センサー値を送信
+    // char msg[64];
+    // snprintf(msg, sizeof(msg), "Temperature: %.2f C", readTemperature());
+    // pDebugLogTx->setValue((uint8_t *)msg, strlen(msg));
+    // pDebugLogTx->notify();
+
+    // Blink status LED when sending BLE message
+    status_led_blink_aws();
+}
+```
+
+**カスタマイズ例:**
+
+```cpp
+// 例1: センサー値を送信
+float temperature = analogRead(34) * 0.1; // 適当な変換
+char msg[64];
+snprintf(msg, sizeof(msg), "Temp: %.1f°C", temperature);
+pDebugLogTx->setValue((uint8_t *)msg, strlen(msg));
+pDebugLogTx->notify();
+
+// 例2: ボタン状態を送信
+if (digitalRead(BUTTON_PIN) == LOW) {
+    const char *msg = "Button Pressed!";
+    pDebugLogTx->setValue((uint8_t *)msg, strlen(msg));
+    pDebugLogTx->notify();
+}
+
+// 例3: Wi-Fi経由で外部APIにアクセス
+if (wifi_mgr_is_connected()) {
+    // HTTPClient で外部APIにリクエスト
+    // 結果をBLE経由で送信
+}
+```
+
+#### 📍 書き換え箇所2: setup()関数での初期化
+
+センサーやピンの初期化は `setup()` 関数の最後に追加してください：
+
+```cpp
+// ファイル: src/main.cpp
+// 行: 900付近
+
+void setup()
+{
+    // ... 既存の初期化コード ...
+
+    log_println("[Setup] Initialization complete");
+
+    // ★★★ ここにセンサー初期化を追加 ★★★
+    // 例: I2Cセンサーの初期化
+    // Wire.begin(SDA_PIN, SCL_PIN);
+    // if (!sensor.begin()) {
+    //     log_println("[E] Sensor init failed");
+    // }
+
+    // 例: GPIOピンの初期化
+    // pinMode(BUTTON_PIN, INPUT_PULLUP);
+    // pinMode(LED_PIN, OUTPUT);
+}
+```
+
+### ✅ 応用：定数を変更する
+
+#### BLE送信間隔を変更
+
+```cpp
+// ファイル: src/main.cpp
+// 行: 30付近
+
+#define BLE_OUTPUT_INTERVAL_MS 1000  // ← この値を変更（ミリ秒）
+
+// 例: 5秒ごと
+#define BLE_OUTPUT_INTERVAL_MS 5000
+```
+
+#### デバイス名を変更
+
+```cpp
+// ファイル: src/main.cpp
+// 行: 777付近
+
+void init_ble(void)
+{
+    log_println("[I] Starting BLE device init...");
+    BLEDevice::init("ESP32-S3-MICON");  // ← ここを変更
+
+    // 例: 自分の名前にする
+    // BLEDevice::init("MyESP32-Device");
+}
+```
+
+### ✅ 高度：新しいBLEコマンドを追加
+
+`MyCharacteristicCallbacks::onWrite()` に新しいコマンドを追加できます：
+
+```cpp
+// ファイル: src/main.cpp
+// 行: 250付近
+
+class MyCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *pCharacteristic)
+    {
+        std::string rxValue = pCharacteristic->getValue();
+        if (rxValue.length() > 0)
+        {
+            String command = String(rxValue.c_str());
+            command.trim();
+
+            // ... 既存のコマンド処理 ...
+
+            // ★★★ 新しいコマンドを追加 ★★★
+            else if (command == "LED_ON")
+            {
+                digitalWrite(LED_PIN, HIGH);
+                log_println("[I] LED turned ON");
+            }
+            else if (command == "LED_OFF")
+            {
+                digitalWrite(LED_PIN, LOW);
+                log_println("[I] LED turned OFF");
+            }
+        }
+    }
+};
+```
+
+---
+
+## 📂 ファイル構成
+
+```
+MiconSide/
+├── src/
+│   └── main.cpp                 # メインプログラム（ここを編集）
+├── platformio.ini               # PlatformIO設定
+├── partitions_ota_2m.csv        # OTA対応パーティションテーブル
+├── partitions.csv               # 標準パーティションテーブル
+└── README.md                    # このファイル
+```
+
+---
+
+## 🔍 主要な関数とグローバル変数
+
+| 関数/変数                 | 説明                                  |
+| ------------------------- | ------------------------------------- |
+| `setup()`                 | 起動時の初期化処理                    |
+| `loop()`                  | メインループ（ここを主に書き換える）  |
+| `log_println(msg)`        | BLE経由でログを送信                   |
+| `ble_device_connected`    | BLE接続状態（true/false）             |
+| `pDebugLogTx`             | BLE経由でログを送信するCharacteristic |
+| `wifi_mgr_is_connected()` | Wi-Fi接続状態を取得                   |
+| `wifi_mgr_get_ip_str()`   | IPアドレスを取得                      |
+| `ota_mode_active`         | OTAモード中かどうか                   |
+
+---
+
+## 🛠 トラブルシューティング
+
+### ❌ ビルドエラー
+
+```bash
+# キャッシュクリア
+pio run --target clean
+
+# 再ビルド
+pio run
+```
+
+### ❌ 書き込みエラー
+
+1. USBケーブルがデータ転送対応か確認（充電専用ケーブルはNG）
+2. ESP32のUSBポートを確認（デバイスマネージャーで確認）
+3. ESP32をリセットボタンで再起動してから再試行
+
+### ❌ シリアルモニタが開かない
+
+```bash
+# COMポートを確認
+pio device list
+
+# シリアルモニタを開く
+pio device monitor --baud 115200
+```
+
+---
+
+## 📚 関連ドキュメント
+
+- [ルートREADME.md](../README.md) - システム全体の説明
+- [WebAppSide/README.md](../WebAppSide/README.md) - WebAppの使い方
+- [SpecifcationDoc.md](../SpecifcationDoc.md) - システム仕様書
+
+---
+
+## ⚡ 次のステップ
+
+1. **サンプルを動かす** - まずはそのまま書き込んで動作確認
+2. **メッセージを変更** - "Hello World"を自分のメッセージに変更
+3. **センサーを追加** - 温度センサーなどを追加してデータ送信
+4. **BLE OTAで更新** - WebAppからファームウェアを更新（USBケーブル不要！）
+
+---
+
+**最終更新**: 2026-03-06  
+**対応WebApp**: https://ble-compiler.netlify.app/
 
 ### 1. AWS IoT Core 証明書の設定
 
